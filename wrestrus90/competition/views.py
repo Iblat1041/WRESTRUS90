@@ -1,6 +1,7 @@
 from typing import Any
 from django.db.models.query import QuerySet
 from django.shortcuts import render
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import TemplateView, ListView, DetailView, FormView, CreateView, UpdateView
 from .models import Competition
 from django.shortcuts import render, redirect, get_object_or_404
@@ -39,9 +40,10 @@ class ShowPostCompetition(DetailView):
         return get_object_or_404(Competition, slug=self.kwargs[self.slug_url_kwarg])
 
 
-class AddPostCompetition(CreateView):
+class AddPostCompetition(LoginRequiredMixin, CreateView):
     form_class = AddPostForm
     template_name = 'competition/addpage.html'
+    login_url = '/admin/' # перенаправляем неавторизованого пользователя
 
     extra_context = {
         'menu': menu_competition,

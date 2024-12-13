@@ -1,3 +1,4 @@
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.db.models.query import QuerySet
 from core.enums import Limits
 from django.db.models import(
@@ -11,7 +12,8 @@ from django.db.models import(
    BooleanField,
    Manager,
    ForeignKey,
-   PROTECT
+   PROTECT,
+   SET_NULL
 )
 
 from django.urls import reverse
@@ -61,7 +63,12 @@ class Competition(Model):
         default=Status.DRAFT,
         verbose_name="Статус"
         )
-    cat = ForeignKey('CategoryCompetition', on_delete=PROTECT, null=True)
+    cat = ForeignKey(
+        'CategoryCompetition', 
+        on_delete=PROTECT,
+        null=True
+        )
+    author = ForeignKey(get_user_model, on_delete=SET_NULL)
 
     objects = Manager()
     published = PublishedManager()

@@ -22,7 +22,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'user.apps.UserConfig',
+    'users',
     'competition.apps.CompetitionConfig',
     'event.apps.EventConfig',
     'api.apps.ApiConfig',
@@ -55,8 +55,9 @@ TEMPLATES = [
             'context_processors': [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
+                'django.contrib.auth.context_processors.auth', # передает в шаблон user
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.get_menu_context', # контекстный процессор
             ],
         },
     },
@@ -130,3 +131,10 @@ MEDIA_URL = '/media/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+#задает URL-адрес, на который следует перенаправлять пользователя после успешной авторизации;
+LOGIN_REDIRECT_URL = 'home'
+#определяет URL-адрес, на который следует перенаправить неавторизованного пользователя при попытке посетить закрытую страницу сайта;
+LOGIN_URL = '/'
+#  задает URL-адрес, на который перенаправляется пользовате  ль после выхода.
+LOGOUT_REDIRECT_URL = '/'
