@@ -127,8 +127,11 @@ STATIC_URL = 'static/'
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
+#
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend', # стандартный авторизация по логин
+    'users.authentication.EmailAuthBackend', # авторизация по email
+]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -138,3 +141,5 @@ LOGIN_REDIRECT_URL = 'home'
 LOGIN_URL = '/'
 #  задает URL-адрес, на который перенаправляется пользовате  ль после выхода.
 LOGOUT_REDIRECT_URL = '/'
+
+DEFAULT_USER_IMAGE = MEDIA_URL + 'users/default.png'

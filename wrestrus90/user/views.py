@@ -7,11 +7,17 @@ from django.shortcuts import render
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, UpdateView
 
-from sitewomen import settings
-from .forms import LoginUserForm, RegisterUserForm, ProfileUserForm, UserPasswordChangeForm
+from wrestrus90 import settings
+from .forms import(
+    LoginUserForm,
+    RegisterUserForm,
+    ProfileUserForm,
+    UserPasswordChangeForm
+)
 
 
 class LoginUser(LoginView):
+    """Авторизация пользователя"""
     form_class = LoginUserForm
     template_name = 'users/login.html'
     extra_context = {'title': 'Авторизация'}
@@ -21,6 +27,7 @@ class LoginUser(LoginView):
 
 
 class RegisterUser(CreateView):
+    """Регистрация пользователя"""
     form_class = RegisterUserForm
     template_name = 'users/register.html'
     extra_context = {'title': "Регистрация"}
@@ -40,10 +47,12 @@ class ProfileUser(LoginRequiredMixin, UpdateView):
         return reverse_lazy('users:profile')
 
     def get_object(self, queryset=None):
+        """Отбирает запись которая будет редактироваться, запись под которой зашли"""
         return self.request.user
 
 
 class UserPasswordChange(PasswordChangeView):
+    """Смена пароля"""
     form_class = UserPasswordChangeForm
     success_url = reverse_lazy("users:password_change_done")
     template_name = "users/password_change_form.html"

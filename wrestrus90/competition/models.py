@@ -40,9 +40,9 @@ class Competition(Model):
         verbose_name='Slug'
         )
     photo = ImageField(
-        upload_to="photos/%Y/%m/%d/", 
+        upload_to="photos/%Y/%m/%d/",
         default=None,
-        blank=True, 
+        blank=True,
         null=True,
         verbose_name="Фото"
         )
@@ -64,11 +64,18 @@ class Competition(Model):
         verbose_name="Статус"
         )
     cat = ForeignKey(
-        'CategoryCompetition', 
+        'CategoryCompetition',
         on_delete=PROTECT,
         null=True
         )
-    author = ForeignKey(get_user_model, on_delete=SET_NULL)
+    author = ForeignKey(
+        get_user_model,
+        on_delete=SET_NULL,
+        related_name = 'posts',
+        null=True,
+        default=None
+    )
+
 
     objects = Manager()
     published = PublishedManager()
