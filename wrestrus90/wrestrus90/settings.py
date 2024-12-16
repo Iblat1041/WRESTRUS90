@@ -133,6 +133,21 @@ AUTHENTICATION_BACKENDS = [
     'users.authentication.EmailAuthBackend', # авторизация по email
 ]
 
+# начало настройка почтового сервера
+# EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+# EMAIL_HOST = "smtp.yandex.ru"
+# EMAIL_PORT = 465
+# EMAIL_HOST_USER = "djangocourse@yandex.ru"
+# EMAIL_HOST_PASSWORD = "bnufhkwcripaunvu"
+# EMAIL_USE_SSL = True
+
+# DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+# SERVER_EMAIL = EMAIL_HOST_USER
+# EMAIL_ADMIN = EMAIL_HOST_USER
+# конец настройка почтового сервера
+
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 #задает URL-адрес, на который следует перенаправлять пользователя после успешной авторизации;
