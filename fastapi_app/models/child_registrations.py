@@ -1,12 +1,11 @@
 from sqlalchemy import Column, DateTime, Enum, Integer, String, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from fastapi_app.core.config import Base
+from core.db import Base
 
 class ChildRegistration(Base):
     __tablename__ = "child_registrations"
 
-    id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     child_name = Column(String, nullable=False)
     age = Column(Integer, nullable=False)

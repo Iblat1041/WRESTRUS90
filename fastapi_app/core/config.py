@@ -1,19 +1,28 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
-import os
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()  # Загружаем переменные из .env
 
-# URL базы данных из переменных окружения
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/wrestus90")
+class Settings(BaseSettings):
+    """Настройки приложения."""
 
-# Создание движка SQLAlchemy
-engine = create_engine(DATABASE_URL)
+    postgres_user: str = Field(alias="POSTGRES_USER")
+    postgres_password: str = Field(alias="POSTGRES_PASSWORD")
+    postgres_db: str = Field(alias="POSTGRES_DB")
+    postgres_server: str = Field(alias="POSTGRES_SERVER")
+    postgres_port: int = Field(alias="POSTGRES_PORT")
 
-# Создание фабрики сессий
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    @property
+    def database_url(self) -> str:
+        """Создание строки подключения к базе данных."""
+        return (
+            f'postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@'
+            f'{self.postgres_server}:{self.postgres_port}/{self.postgres_db}'
+        )
 
-# База для декларативных моделей
-Base = declarative_base()
+
+    model_config = SettingsConfigDict(
+        env_file="../infra/.env",
+        case_sensitive=False)
+
+
+settings = Settings()

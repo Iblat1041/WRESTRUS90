@@ -1,11 +1,10 @@
 from sqlalchemy import Column, DateTime, Integer, String, Text, JSON, Enum
 from sqlalchemy.sql import func
-from fastapi_app.core.config import Base
+from core.db import Base
 
 class News(Base):
     __tablename__ = "news"
 
-    id = Column(Integer, primary_key=True, index=True)
     vk_post_id = Column(String, unique=True, index=True)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, DateTime, Enum, Integer, String, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from fastapi_app.core.config import Base
+from core.db import Base
 
 class Admin(Base):
     __tablename__ = "admins"
