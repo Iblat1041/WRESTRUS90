@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Главная{% endblock %}
+{% block content %}
+    <h1>Добро пожаловать на сайт Федерации борьбы Мытищи</h1>
+    <h2>Новости</h2>
+    {% for news in news_list %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">{{ news.title }}</h5>
+                <p class="card-text">{{ news.content|truncatewords:20 }}</p>
+                <a href="/news/{{ news.id }}" class="btn btn-primary">Читать</a>
+            </div>
+        </div>
+    {% endfor %}
+    <h2>Регистрация ребёнка</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-success">Зарегистрировать</button>
+    </form>
+{% endblock %}

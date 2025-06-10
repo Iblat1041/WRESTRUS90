@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}События{% endblock %}
+{% block content %}
+    <h1>Список соревнований</h1>
+    {% if events %}
+        <div class="list-group">
+            {% for event in events %}
+                <a href="#" class="list-group-item list-group-item-action">
+                    <h5 class="mb-1">{{ event.title }}</h5>
+                    <p class="mb-1">Дата: {{ event.date|date:"d.m.Y H:i" }}</p>
+                    <p class="mb-1">Место: {{ event.location }}</p>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>Событий пока нет.</p>
+    {% endif %}
+{% endblock %}
