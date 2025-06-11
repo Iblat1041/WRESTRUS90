@@ -26,3 +26,28 @@ services:
       timeout: 10s
       retries: 5
     restart: unless-stopped
+
+
+  # django:
+  #   build: ../django_app
+  #   command: python manage.py runserver 0.0.0.0:8000
+  #   volumes:
+  #     - ../django_app:/app
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - db
+  #   env_file:
+  #     - ../infra/.env
+
+  # bot:
+  #   build:
+  #     context: ..
+  #     dockerfile: Dockerfile
+  #   command: python -m bot.main
+  #   volumes:
+  #     - ./bot:/app/bot
+  #   depends_on:
+  #     - db
+  #   env_file:
+  #     - ./.env

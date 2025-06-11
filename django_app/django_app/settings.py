@@ -16,8 +16,7 @@ SECRET_KEY = 'django-insecure-wy1_i1%!k!q=)n=@rv=3dwr(7+$+w5*c#uaf(=jmwo+z0)j)(q
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -32,6 +31,8 @@ INSTALLED_APPS = [
     
     'users.apps.UsersConfig',
 ]
+
+# AUTH_USER_MODEL = 'users.User'  # Указываем кастомную модель
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
