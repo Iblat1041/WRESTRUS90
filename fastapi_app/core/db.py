@@ -1,24 +1,49 @@
 from sqlalchemy import Column, Integer
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import declarative_base, declared_attr, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base, declared_attr
+from contextlib import asynccontextmanager
 
 from core.config import settings
 
-
 class PreBase:
-
+    """Базовый класс для всех моделей с автоматическим именем таблицы и полем ID."""
+    
     @declared_attr
     def __tablename__(cls):
-        # Именем таблицы будет название модели в нижнем регистре.
         return cls.__name__.lower()
 
-    # Во все таблицы будет добавлено поле ID.
     id = Column(Integer, primary_key=True)
 
-
-# В качестве основы для базового класса укажем класс PreBase.
+# Создаём базовый класс для моделей
 Base = declarative_base(cls=PreBase)
 
-engine = create_async_engine(settings.database_url)
+# Настройка асинхронного движка
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    pool_size=5,
+    max_overflow=10,
+)
 
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession) 
+# Фабрика асинхронных сессий
+async_session_maker = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+@asynccontextmanager
+async def get_async_session():
+    """Контекстный менеджер для работы с асинхронной сессией."""
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise e
+        finally:
+            await session.close()
+
+# Для обратной совместимости
+AsyncSessionLocal = async_session_maker

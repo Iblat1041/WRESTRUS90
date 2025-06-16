@@ -133,6 +133,19 @@ alembic -c db/alembic.ini upgrade head
 python main.py
 ```
 
+## Запуск админ MAin
+
+1. Перейдите в папку `django_app`:
+```bash
+cd django_app
+```
+
+
+4. Запустите админки:
+```bash
+http://localhost:8443/admin/
+```
+
 ## Вход в панель администрирования
 
 Откройте в браузере: сгенерированный URL + /admin/ (например, https://ваш_субдомен.loca.lt/admin/)
