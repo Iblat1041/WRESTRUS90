@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Web-сервер
     web_server_host: str = Field(alias="WEB_SERVER_HOST", default="0.0.0.0")
-    web_server_port: int = Field(alias="WEB_SERVER_PORT", default=8001)
+    web_server_port: int = Field(alias="WEB_SERVER_PORT", default=8443)
 
     @property
     def database_url(self) -> str:

@@ -5,19 +5,23 @@ from sqlalchemy import select
 
 from bot.logger import logger
 from core.config import settings
-from core.db import Base, get_async_session, engine
+from core.db import Base, engine, async_session_maker
 from services.models import Admin, User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,
+    )
 
 async def create_first_superuser() -> None:
-    async with get_async_session() as session:
+    async with async_session_maker() as session:
         result = await session.execute(
-            select(User).where(User.email == settings.first_superuser_email)
+            select(User).where(
+                User.telegram_id == settings.first_superuser_telegram_id),
         )
-        existing_user = result.scalar_one_or_none()
-        if existing_user:
-            logger.info("Суперпользователь с таким email уже существует")
+        if result.scalar_one_or_none():
+            logger.info("Пользователь с таким Telegram ID уже существует")
             return
 
         # Создаём и сохраняем пользователя
@@ -34,7 +38,7 @@ async def create_first_superuser() -> None:
         # Создаём и сохраняем администратора
         admin = Admin(
             user_id=user.id,
-            role=settings.first_superuser_role,
+
             password=pwd_context.hash(settings.first_superuser_password)
         )
         session.add(admin)

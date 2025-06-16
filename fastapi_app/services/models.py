@@ -9,7 +9,6 @@ class Admin(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
-    role = Column(String(10), nullable=False)
     password = Column(String, nullable=False)  # Хранит хешированный пароль
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

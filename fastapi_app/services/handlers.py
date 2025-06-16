@@ -25,7 +25,6 @@ async def intern_stage_quizzes_test_command(
     state: FSMContext,
 ) -> None:
     """Обработчик команды /hi для начала тестирования."""
-    await state.set_state(QuizState.QUIZZES_MENU)
     await message.answer(
         'Выберети ваши дальнейшие действия.\n'
         'Выберете нужное вам меню.',
