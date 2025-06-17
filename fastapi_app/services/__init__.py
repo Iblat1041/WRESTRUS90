@@ -5,11 +5,6 @@ from .admin import EventAdmin as EventAdmin
 from .admin import NewsAdmin as NewsAdmin
 from .admin import UserAdmin as UserAdmin
 
-# Экспорт только нужных классов
-__all__ = [
-    'AdminAdmin',
-    'ChildRegistrationAdmin',
-    'EventAdmin',
-    'NewsAdmin',
-    'UserAdmin',
-    ]
+from .admin_panel.handlers import admin_router
+
+from services.models import User

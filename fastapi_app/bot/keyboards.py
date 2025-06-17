@@ -33,3 +33,17 @@ def get_inline_keyboard(
         resize_keyboard=True,
         input_field_placeholder=placeholder,
     )
+
+
+MAIN_MENU_KB = get_inline_keyboard(
+    ('Соревнования', 'event'),
+    ('Мероприятия', 'news'),
+    ('Записать ребенка в секцию', 'child_reg'),
+    ('Организация соревнований', 'org_of_comps'),
+    ('Администратор', 'admin'),
+    sizes=(2, 1, 1, 1, 1),  # Обновлен sizes для нового порядка
+    url_buttons=(
+        ('Посетить сайт федерации', 'https://wrestrus90.ru'),
+        ('Посетить страничку VKontakte', 'https://vk.com/fsbmytishchi'),
+    )
+)

@@ -19,11 +19,10 @@ from fastadmin import fastapi_app as admin_app
 from fastapi import FastAPI
 
 from bot.handlers import base_router
-from services.handlers import router_quizzes
 from core.config import settings
 from core.init_db import create_first_superuser, init_db
-from services.admin import AdminAdmin, ChildRegistrationAdmin, EventAdmin, NewsAdmin, UserAdmin
-
+from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, NewsAdmin, UserAdmin
+from services import admin_router
 
 # Настройка централизованного логирования
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -39,7 +38,10 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 # Регистрация маршрутов
-dp.include_routers(base_router, router_quizzes)
+dp.include_routers(
+    admin_router,
+    base_router,
+    )
 
 # Применение middleware
 dp.message.middleware(RoleMiddleware())
