@@ -22,7 +22,7 @@ from bot.handlers import base_router
 from services.handlers import router_quizzes
 from core.config import settings
 from core.init_db import create_first_superuser, init_db
-import services.admin  # Импорт для регистрации моделей fastadmin
+from services.admin import AdminAdmin, ChildRegistrationAdmin, EventAdmin, NewsAdmin, UserAdmin
 
 
 # Настройка централизованного логирования
