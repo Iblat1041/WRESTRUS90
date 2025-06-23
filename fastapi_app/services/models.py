@@ -33,20 +33,12 @@ class ChildRegistration(Base):
 class Event(Base):
     __tablename__ = "events"
 
-    title = Column(String, nullable=False)
-    date = Column(DateTime(timezone=True), nullable=False)
-    location = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-
-class News(Base):
-    __tablename__ = "news"
-
     vk_post_id = Column(String, unique=True, index=True)
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     images = Column(JSON, nullable=True)
-    status = Column(Enum("pending", "approved", "rejected", name="news_status"), default="pending")
+    status = Column(Enum("active", "inactive", "pending", name="news_status"), default="active")
+    category = Column(Enum("competition", "event", "sponsor", name="news_status"), default="competition")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     published_at = Column(DateTime(timezone=True), nullable=True)
 

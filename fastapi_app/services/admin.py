@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from fastadmin import SqlAlchemyModelAdmin, register
-from core.db import AsyncSessionLocal, Base, engine
-from services.models import Admin, ChildRegistration, Event, News, User
+from core.db import AsyncSessionLocal
+from services.models import Admin, ChildRegistration, Event, User
 import logging
 
 # Используем логгер из конфигурации проекта
@@ -67,20 +67,6 @@ class EventAdmin(SqlAlchemyModelAdmin):
     def __init__(self, *args, **kwargs):
         """Инициализация с логированием регистрации модели."""
         logger.info("Регистрация модели Event")
-        super().__init__(*args, **kwargs)
-
-
-@register(News, sqlalchemy_sessionmaker=AsyncSessionLocal)
-class NewsAdmin(SqlAlchemyModelAdmin):
-    """Класс администрирования для модели News."""
-    list_display = ["vk_post_id", "title", "status", "created_at", "published_at"]
-    list_filter = ["status", "created_at"]
-    search_fields = ["title", "vk_post_id", "content"]
-    date_hierarchy = "created_at"
-
-    def __init__(self, *args, **kwargs):
-        """Инициализация с логированием регистрации модели."""
-        logger.info("Регистрация модели News")
         super().__init__(*args, **kwargs)
 
 

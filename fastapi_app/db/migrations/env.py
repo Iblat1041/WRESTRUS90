@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from core.config import settings
 from core.db import Base  # Импорт Base
-from services.models import Admin, ChildRegistration, Event, News, User
+from services.models import Admin, ChildRegistration, Event, User
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

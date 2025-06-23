@@ -21,7 +21,7 @@ from fastapi import FastAPI
 from bot.handlers import base_router
 from core.config import settings
 from core.init_db import create_first_superuser, init_db
-from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, NewsAdmin, UserAdmin
+from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, UserAdmin
 from services import admin_router
 
 # Настройка централизованного логирования
