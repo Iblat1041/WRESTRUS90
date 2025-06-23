@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     postgres_password: str = Field(alias="POSTGRES_PASSWORD")
     postgres_db: str = Field(alias="POSTGRES_DB")
     postgres_server: str = Field(alias="POSTGRES_SERVER", default="localhost")
-    postgres_port: int = Field(alias="POSTGRES_PORT", default=5432)
+    postgres_port: int = Field(alias="POSTGRES_PORT", default=5000)
 
     # Telegram-бот
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
