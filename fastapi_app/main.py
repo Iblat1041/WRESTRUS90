@@ -22,7 +22,7 @@ from bot.handlers import base_router
 from core.config import settings
 from core.init_db import create_first_superuser, init_db
 from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, UserAdmin
-from services import admin_router
+from services import admin_router, child_router
 
 # Настройка централизованного логирования
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -41,6 +41,7 @@ dp = Dispatcher(storage=storage)
 dp.include_routers(
     admin_router,
     base_router,
+    child_router,
     )
 
 # Применение middleware

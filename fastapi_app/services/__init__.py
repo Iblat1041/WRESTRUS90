@@ -4,6 +4,7 @@ from .admin import ChildRegistrationAdmin as ChildRegistrationAdmin
 from .admin import EventAdmin as EventAdmin
 from .admin import UserAdmin as UserAdmin
 
-from .admin_panel.handlers import admin_router
+from .admin_handl.handlers import admin_router
+from .child_handl.handlers import child_router
 
 from services.models import User
