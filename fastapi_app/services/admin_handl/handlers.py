@@ -18,16 +18,21 @@ from crud.child_registrations import (
     get_registration_by_id,
     update_registration_status,
 )
-from .keyboards import get_users_list_keyboard, get_child_registrations_keyboard
+from .keyboards import (
+    get_child_actions_keyboard,
+    get_child_registrations_list_keyboard,
+    get_users_list_keyboard,
+    )
 
 admin_router = Router()
 
 
 class StartState(StatesGroup):
-    """Стартовый стэйт."""
+    """Стартовый стэйт для состояний администратора."""
     START_ADMIN = State()
     USERS = State()
     CHILD_REGISTRATIONS = State()
+    SELECT_CHILD = State()  # Новое состояние для выбора ребенка
 
 
 # Обновленное главное меню администратора
@@ -97,15 +102,60 @@ async def show_child_registrations_list(
     per_page = 5
 
     async with get_async_session() as session:
-        registrations = await get_all_registrations(session, offset=page * per_page, limit=per_page)
+        registrations = await get_all_registrations(
+            session,
+            offset=page * per_page,
+            limit=per_page
+            )
         total_registrations = await get_registrations_count(session)
 
-    keyboard = get_child_registrations_keyboard(registrations, page, total_registrations, per_page)
+    keyboard = get_child_registrations_list_keyboard(
+        registrations, 
+        page,
+        total_registrations,
+        per_page
+        )
 
-    await state.update_data(current_menu="child_registrations_list", current_page=page)
+    await state.update_data(
+        current_menu="child_registrations_list",
+        current_page=page
+        )
     await callback.message.edit_text(
         ("Управление зарегистрированными детьми.\n\n"
          f"Список детей (страница {page + 1}):"),
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data.startswith("child_select_"))
+async def show_child_actions(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Отображает действия (Утвердить/Отклонить) для выбранного ребенка.
+
+    Args:
+        callback: Объект CallbackQuery от aiogram.
+        state: Контекст конечного автомата состояний.
+        session: Асинхронная сессия SQLAlchemy.
+    """
+    reg_id = int(callback.data.split("_")[2])  # Извлекаем reg_id из child_select_{reg_id}
+
+    async with get_async_session() as session:
+        registration = await get_registration_by_id(session, reg_id)
+        if not registration:
+            await callback.answer("Запись не найдена.", show_alert=True)
+            return
+
+    status = "✅" if registration.status == "approved" else "❌" if registration.status == "rejected" else "⏳"
+    text = f"{registration.child_name} {registration.child_surname} (Возраст: {registration.age}) [{status}]"
+    keyboard = get_child_actions_keyboard(reg_id, registration.status)
+
+    await state.set_state(StartState.SELECT_CHILD)
+    await callback.message.edit_text(
+        f"Действия для ребенка:\n\n{text}",
         reply_markup=keyboard,
     )
     await callback.answer()
@@ -117,48 +167,75 @@ async def handle_child_registration_action(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """Обрабатывает действия над записью ребенка (утвердить/отклонить)."""
-    action, reg_id = callback.data.split("_")[1:]  # Например, "child_reg_approve_1"
-    reg_id = int(reg_id)
+    """Обрабатывает действия над записью ребенка (утвердить/отклонить).
+
+    Args:
+        callback: Объект CallbackQuery от aiogram.
+        state: Контекст конечного автомата состояний.
+        session: Асинхронная сессия SQLAlchemy.
+    """
+    parts = callback.data.split("_")
+    if len(parts) < 3:  # Минимальный формат: ["child", "reg", "action", "reg_id"]
+        await callback.answer("Неверный формат действия.", show_alert=True)
+        return
+
+    action = parts[2]  # Третий элемент — действие (approve/reject)
+    reg_id = int(parts[3])  # Четвертый элемент — ID регистрации
 
     async with get_async_session() as session:
-        registration = await get_registration_by_id(session, reg_id)
-        if not registration:
-            await callback.answer("Запись не найдена.", show_alert=True)
-            return
+            registration = await get_registration_by_id(session, reg_id)
+            if not registration:
+                await callback.answer("Запись не найдена.", show_alert=True)
+                return
 
-        if action == "approve":
-            if update_registration_status(session, reg_id, "approved"):
-                await callback.answer("Регистрация утверждена.")
-            else:
-                await callback.answer("Ошибка при утверждении.", show_alert=True)
-        elif action == "reject":
-            if update_registration_status(session, reg_id, "rejected"):
-                await callback.answer("Регистрация отклонена.")
-            else:
-                await callback.answer("Ошибка при отклонении.", show_alert=True)
+            if action == "approve":
+                if await update_registration_status(session, reg_id, "approved"):  # Добавлен await
+                    await callback.answer("Регистрация утверждена.")
+                else:
+                    await callback.answer("Ошибка при утверждении.", show_alert=True)
+            elif action == "reject":
+                if await update_registration_status(session, reg_id, "rejected"):  # Добавлен await
+                    await callback.answer("Регистрация отклонена.")
+                else:
+                    await callback.answer("Ошибка при отклонении.", show_alert=True)
 
-    # Проверяем, изменилось ли содержимое перед редактированием
+        # Обновляем список после изменения статуса
     data = await state.get_data()
     page = data.get("current_page", 0)
     per_page = 5
     async with get_async_session() as session:
-        registrations = await get_all_registrations(session, offset=page * per_page, limit=per_page)
+        registrations = await get_all_registrations(
+            session,
+            offset=page * per_page,
+            limit=per_page
+        )
         total_registrations = await get_registrations_count(session)
-        new_keyboard = get_child_registrations_keyboard(registrations, page, total_registrations, per_page)
+        new_keyboard = get_child_registrations_list_keyboard(
+            registrations,
+            page,
+            total_registrations,
+            per_page
+        )
+        # Добавляем информацию о последней измененной записи в текст
+        last_updated_reg = next((reg for reg in registrations if reg.id == reg_id), None)
+        status_text = f" (Последняя запись: {last_updated_reg.child_name} [{last_updated_reg.status}]" if last_updated_reg else ""
         new_text = (
             f"Управление зарегистрированными детьми.\n\n"
-            f"Список детей (страница {page + 1}): {id(registrations)}"  # Уникальный идентификатор
+            f"Список детей (страница {page + 1}):{status_text}"
         )
 
-        # Редактируем только если есть изменения
         current_message = callback.message
-        if current_message.text != new_text or current_message.reply_markup != new_keyboard:
+        # Преобразуем клавиатуру в строку для сравнения содержимого
+        current_markup_str = str(current_message.reply_markup) if current_message.reply_markup else ""
+        new_markup_str = str(new_keyboard) if new_keyboard else ""
+        # Проверяем, изменилось ли сообщение
+        if (current_message.text != new_text or current_markup_str != new_markup_str):
             await current_message.edit_text(
                 new_text,
                 reply_markup=new_keyboard,
             )
+            logger.info("Message updated with new status.")
         else:
-            logger.warning("No changes detected, skipping edit_text.")
+            logger.info("Message not modified, skipping edit_text.")
 
     await callback.answer()
