@@ -1,10 +1,17 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardRemove
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.models import ChildRegistration
 from core.db import get_async_session
+from bot.keyboards import MAIN_MENU_KB
+from services.models import ChildRegistration, User
 
 child_router = Router()
 
@@ -17,14 +24,14 @@ class ChildRegState(StatesGroup):
     PARENT_CONTACT = State()
 
 
-@child_router.message(F.text == "child_reg")
+@child_router.callback_query(F.data == "child_reg")
 async def start_child_registration(
-    message: types.Message,
+    callback: types.CallbackQuery,  # Исправлен тип с message на callback
     state: FSMContext,
 ) -> None:
     """Начать процесс регистрации ребенка."""
     await state.set_state(ChildRegState.CHILD_NAME)
-    await message.answer("Введите имя ребенка:")
+    await callback.message.answer("Введите имя ребенка:")
 
 
 @child_router.message(ChildRegState.CHILD_NAME)
@@ -55,9 +62,15 @@ async def process_age(
     state: FSMContext,
 ) -> None:
     """Обработать возраст и запросить контакт родителя."""
-    await state.update_data(age=int(message.text))
-    await state.set_state(ChildRegState.PARENT_CONTACT)
-    await message.answer("Введите контакт родителя (например, телефон):")
+    try:
+        age = int(message.text)
+        if not 0 < age < 150:  # Проверка разумного диапазона возраста
+            raise ValueError("Возраст должен быть от 1 до 149 лет")
+        await state.update_data(age=age)
+        await state.set_state(ChildRegState.PARENT_CONTACT)
+        await message.answer("Введите контакт родителя (например, телефон):")
+    except ValueError as e:
+        await message.answer(f"Ошибка: {e}. Пожалуйста, введите корректный возраст.")
 
 
 @child_router.message(ChildRegState.PARENT_CONTACT)
@@ -66,17 +79,42 @@ async def process_parent_contact(
     state: FSMContext,
     session: AsyncSession,
 ) -> None:
-    """Завершить регистрацию ребенка."""
+    """Завершить регистрацию ребенка и вернуть в главное меню."""
     data = await state.get_data()
-    async with get_async_session() as session:
-        child_reg = ChildRegistration(
-            user_id=message.from_user.id,
-            child_name=data["child_name"],
-            child_surname=data["child_surname"],
-            age=data["age"],
-            parent_contact=message.text,
+    user_id = message.from_user.id
+
+    # Проверка или создание пользователя
+    result = await session.execute(select(User).where(User.telegram_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(
+            telegram_id=user_id,
+            name=message.from_user.username or "Anonymous",
+            created_at=func.now(),
         )
-        session.add(child_reg)
+        session.add(user)
+        await session.flush()  # Получаем ID пользователя
+
+    # Сохранение регистрации ребенка
+    child_reg = ChildRegistration(
+        user_id=user.id,
+        child_name=data["child_name"],
+        child_surname=data["child_surname"],
+        age=data["age"],
+        parent_contact=message.text,
+        status="pending",
+        created_at=func.now(),
+    )
+    session.add(child_reg)
+    try:
         await session.commit()
+    except Exception as e:
+        await session.rollback()
+        await message.answer(f"Ошибка при сохранении: {e}")
+        return
+
     await state.clear()
-    await message.answer("Регистрация ребенка успешно завершена!")
+    await message.answer(
+        "Регистрация ребенка успешно завершена!",
+        reply_markup=MAIN_MENU_KB,
+    )
