@@ -34,6 +34,10 @@ pre-commit install
 ```bash
 cd infra
 ```
+2. Запустите (app, celery_worker, celery_beat) обращаются к redis (для Celery и FSM) и db `docker-compose.production.yml`:
+```bash
+docker-compose -f docker-compose.production.yml up -d
+```
 
 2. Запустите PostgreSQL в Docker, используя файл `docker-compose.yml`:
 ```bash

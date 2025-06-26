@@ -84,7 +84,6 @@ versions
 env.cpython-312.pyc
 
 ./fastapi_app/db/migrations/versions:
-0c005f44a7d2_init.py
 __init__.py
 __pycache__
 
@@ -133,6 +132,7 @@ models.cpython-312.pyc
 ./fastapi_app/services/vk_service:
 
 ./fastapi_app/vk:
+celery_app.py
 __init__.py
 vk_service.py
 
@@ -141,7 +141,30 @@ docker-compose.yml
 pgdata
 
 ./infra/pgdata:
-
+base
+global
+pg_commit_ts
+pg_dynshmem
+pg_hba.conf
+pg_ident.conf
+pg_logical
+pg_multixact
+pg_notify
+pg_replslot
+pg_serial
+pg_snapshots
+pg_stat
+pg_stat_tmp
+pg_subtrans
+pg_tblspc
+pg_twophase
+PG_VERSION
+pg_wal
+pg_xact
+postgresql.auto.conf
+postgresql.conf
+postmaster.opts
+postmaster.pid
 
 ./infra/pgdata/base:
 1
@@ -447,6 +470,7 @@ pgdata
 827
 828
 pg_filenode.map
+pg_internal.init
 PG_VERSION
 
 ./infra/pgdata/base/16384:
@@ -486,33 +510,6 @@ PG_VERSION
 13482
 1417
 1418
-16389
-16392
-16409
-16410
-16415
-16416
-16417
-16419
-16420
-16421
-16426
-16427
-16428
-16430
-16431
-16432
-16433
-16438
-16439
-16440
-16442
-16449
-16457
-16458
-16463
-16464
-16465
 174
 175
 2187
@@ -1375,6 +1372,7 @@ PG_VERSION
 827
 828
 pg_filenode.map
+pg_internal.init
 PG_VERSION
 
 ./infra/pgdata/global:

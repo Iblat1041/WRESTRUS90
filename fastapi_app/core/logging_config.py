@@ -19,6 +19,8 @@ LOGGING_CONFIG = {
             "class": "logging.FileHandler",
             "formatter": "standard",
             "filename": "app.log",
+            "maxBytes": 1024 * 1024 * 10,  # 10 MB
+            "backupCount": 5,  # Хранить 5 резервных копий
         },
     },
     "loggers": {

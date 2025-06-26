@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Telegram-бот
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
 
+    # VK API
+    vk_access_token: str = Field(alias="VK_ACCESS_TOKEN")
+    vk_group_id: str = Field(alias="VK_GROUP_ID")
+
     # Данные первого суперпользователя
     first_superuser_first_name: str = Field(alias="FIRST_SUPERUSER_FIRST_NAME")
     first_superuser_last_name: str = Field(alias="FIRST_SUPERUSER_LAST_NAME")

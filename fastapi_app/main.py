@@ -14,9 +14,10 @@ import uvicorn
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from fastadmin import fastapi_app as admin_app
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from bot.handlers import base_router
 from core.config import settings
@@ -34,7 +35,7 @@ bot = Bot(
     token=settings.telegram_bot_token,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
-storage = MemoryStorage()
+storage = RedisStorage.from_url("redis://redis:6379/0")
 dp = Dispatcher(storage=storage)
 
 # Регистрация маршрутов
@@ -82,6 +83,8 @@ app = FastAPI(lifespan=lifespan)
 logger.info("Монтирование админ-панели fastadmin...")
 app.mount("/admin", admin_app)
 
+# Настройка Prometheus метрик
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 if __name__ == "__main__":
     """Точка входа для запуска приложения с uvicorn."""
