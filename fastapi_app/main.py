@@ -1,13 +1,10 @@
-#!/usr/bin/env python3
-"""Основной файл приложения FastAPI с интеграцией aiogram и fastadmin."""
-
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
 import logging
 import logging.config
 
-from core.logging_config import LOGGING_CONFIG
+from core.logging_config import LOGGING_CONFIG, setup_logging
 
 from bot.middleware import DatabaseMiddleware, RoleMiddleware
 import uvicorn
@@ -25,9 +22,9 @@ from core.init_db import create_first_superuser, init_db
 from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, UserAdmin
 from services import admin_router, child_router
 
-# Настройка централизованного логирования
-logging.config.dictConfig(LOGGING_CONFIG)
-logger = logging.getLogger("my_app")  # Используем логгер 'my_app' из конфигурации
+# Настройка логирования
+setup_logging()
+logger = logging.getLogger("my_app")
 
 
 # Инициализация бота
@@ -35,7 +32,7 @@ bot = Bot(
     token=settings.telegram_bot_token,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
-storage = RedisStorage.from_url("redis://redis:6379/0")
+storage = RedisStorage.from_url(settings.redis_url)  # Используем redis_url из settings
 dp = Dispatcher(storage=storage)
 
 # Регистрация маршрутов

@@ -2,8 +2,8 @@ import aiohttp
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
-from fastapi_app.services.models import Event
-from fastapi_app.core.config import settings
+from services.models import Event
+from core.config import settings
 from sqlalchemy import select
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from aiogram import Bot
