@@ -200,3 +200,12 @@ celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
 Откройте в браузере: сгенерированный URL + /admin/ (например, https://ваш_субдомен.loca.lt/admin/)
 
 Используйте данные суперпользователя из файла `.env` для входа.
+
+```bash
+https://id.vk.com/about/business/go/accounts/230078/apps/53825466/edit
+```
+
+Обновление записей
+```bash
+celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
+```

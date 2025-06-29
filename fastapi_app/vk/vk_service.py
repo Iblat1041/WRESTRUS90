@@ -17,11 +17,11 @@ vk_requests_total = Counter(
     "vk_api_requests_total",
     "Total VK API requests",
     ["status"]
-    )
+)
 vk_request_duration = Histogram(
     "vk_api_request_duration_seconds",
     "VK API request duration"
-    )
+)
 
 class VKService:
     def __init__(self, bot: Bot = None):
@@ -51,70 +51,93 @@ class VKService:
                     "count": count,
                     "extended": 1,
                 }
+                logger.debug(f"VK API params: {params}")
                 async with session.get(f"{self.base_url}/wall.get", params=params) as response:
+                    data = await response.json()
+                    logger.debug(f"VK API response: {data}")
                     vk_request_duration.observe(time.time() - start_time)
                     if response.status == 200:
-                        data = await response.json()
                         if "error" in data:
                             error_msg = data["error"]["error_msg"]
-                            logger.error(f"VK API error: {error_msg}")
+                            error_code = data["error"]["error_code"]
+                            logger.error(f"VK API error {error_code}: {error_msg}")
                             vk_requests_total.labels(status="error").inc()
                             raise Exception(f"VK API error: {error_msg}")
                         vk_requests_total.labels(status="success").inc()
-                        return data.get("response", {}).get("items", [])
+                        items = data.get("response", {}).get("items", [])
+                        logger.info(f"Received {len(items)} news items from VK")
+                        return items
                     else:
                         logger.error(f"VK API request failed with status {response.status}")
                         vk_requests_total.labels(status="error").inc()
                         raise Exception(f"VK API error: {response.status}")
-        except Exception:
+        except Exception as e:
             vk_request_duration.observe(time.time() - start_time)
+            logger.error(f"Fetch news failed: {str(e)}")
             raise
 
     async def save_news_to_db(self, session: AsyncSession, news: list[dict]):
         """Сохранение новостей в таблицу Events и отправка уведомлений."""
         logger.info(f"Saving {len(news)} news items to database")
-        new_events = []
-        for item in news:
-            existing_event = await session.execute(
-                select(Event).filter_by(vk_post_id=str(item["id"]))
+        # Собираем все vk_post_id для проверки одним запросом
+        vk_ids = [str(item["id"]) for item in news]
+        async with session.begin():  # Явное начало транзакции
+            # Проверяем существующие события одним запросом
+            result = await session.execute(
+                select(Event.vk_post_id).where(Event.vk_post_id.in_(vk_ids))
             )
-            if existing_event.scalar_one_or_none():
-                logger.debug(f"Skipping existing post with vk_post_id {item['id']}")
-                continue
+            existing_ids = set(result.scalars().all())
+            
+            new_events = []
+            for item in news:
+                vk_id = str(item["id"])
+                if vk_id not in existing_ids:
+                    images = []
+                    if "attachments" in item:
+                        for attachment in item.get("attachments", []):
+                            if attachment["type"] == "photo":
+                                sizes = attachment["photo"]["sizes"]
+                                largest = max(sizes, key=lambda x: x["width"] * x["height"])
+                                images.append(largest["url"])
 
-            images = []
-            if "attachments" in item:
-                for attachment in item.get("attachments", []):
-                    if attachment["type"] == "photo":
-                        sizes = attachment["photo"]["sizes"]
-                        largest = max(sizes, key=lambda x: x["width"] * x["height"])
-                        images.append(largest["url"])
-
-            event = Event(
-                vk_post_id=str(item["id"]),
-                title=item.get("text", "")[:100] or "Без заголовка",
-                content=item.get("text", "") or "Без текста",
-                images=images,
-                status="active",
-                category="event",
-                created_at=datetime.utcnow(),
-                published_at=datetime.fromtimestamp(item["date"]) if item["date"] else None,
-            )
-            session.add(event)
-            new_events.append(event)
-            logger.debug(f"Added new event with vk_post_id {item['id']}")
-
-        await session.commit()
-        logger.info("News saved successfully")
-
-        # Отправка уведомлений администраторам
-        if self.bot and new_events:
-            for event in new_events:
-                try:
-                    await self.bot.send_message(
-                        chat_id=settings.first_superuser_telegram_id,
-                        text=f"Новое событие: {event.title}\nID: {event.vk_post_id}",
+                    event = Event(
+                        vk_post_id=vk_id,
+                        title=item.get("text", "")[:100] or "Без заголовка",
+                        content=item.get("text", "") or "Без текста",
+                        images=images,
+                        status="active",
+                        category="event",
+                        created_at=datetime.utcnow(),
+                        published_at=datetime.fromtimestamp(item["date"]) if item["date"] else None,
                     )
-                    logger.info(f"Sent Telegram notification for event {event.vk_post_id}")
+                    new_events.append(event)
+                    logger.debug(f"Added new event with vk_post_id {vk_id}")
+
+            if new_events:
+                session.add_all(new_events)
+                try:
+                    await session.commit()
+                    logger.info(f"Successfully saved {len(new_events)} new events to database")
                 except Exception as e:
-                    logger.error(f"Failed to send Telegram notification: {str(e)}")
+                    logger.error(f"Failed to save events to database: {str(e)}", exc_info=True)
+                    await session.rollback()
+                    raise
+            else:
+                logger.info("No new events to save")
+
+            # Отправка уведомлений администраторам
+            if self.bot and new_events:
+                telegram_id = getattr(settings, "answer_telegram_id", None) or settings.first_superuser_telegram_id
+                if not telegram_id:
+                    logger.warning("No Telegram ID provided, skipping notifications")
+                    return
+
+                for event in new_events:
+                    try:
+                        await self.bot.send_message(
+                            chat_id=telegram_id,
+                            text=f"Новое событие: {event.title}\nID: {event.vk_post_id}",
+                        )
+                        logger.info(f"Sent Telegram notification for event {event.vk_post_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to send Telegram notification for event {event.vk_post_id}: {str(e)}")

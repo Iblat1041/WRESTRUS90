@@ -11,7 +11,6 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-
 # Настройка логирования
 setup_logging()
 logger = logging.getLogger("my_app.celery")
@@ -19,17 +18,10 @@ logger = logging.getLogger("my_app.celery")
 # Инициализация Celery
 celery_app = Celery(
     "vk_news",
-    broker="redis://localhost:6379/0",  # Для локального запуска
+    broker="redis://localhost:6379/0",
     backend="redis://localhost:6379/0",
     include=["fastapi_app.vk.celery_app"],
 )
-
-# celery_app = Celery(
-#     "vk_news",
-#     broker="redis://redis:6379/0",
-#     backend="redis://redis:6379/0",
-#     include=["fastapi_app.celery_app"],
-# )
 
 # Конфигурация Celery
 celery_app.conf.update(
@@ -39,47 +31,27 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     broker_connection_retry_on_startup=True,
+    task_track_started=True,
+    task_create_missing_queues=True,
 )
 
-# Декорируем задачу с явным именем
-@celery_app.task(name="fetch_and_save_news_task")
-def fetch_and_save_news_task():
-    """Задача для получения и сохранения новостей VK."""
+async def fetch_and_save_news_task_async():
+    """Асинхронная задача для получения и сохранения новостей VK."""
     logger.info("Starting VK news fetch task")
+    bot = None
     try:
-        # Создаём событийный цикл
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        # Инициализируем сервисы
         bot = Bot(
             token=settings.telegram_bot_token,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
         vk_service = VKService(bot=bot)
 
-        # Выполняем асинхронные операции
-        news = loop.run_until_complete(vk_service.fetch_news(count=10))
-        session = loop.run_until_complete(get_async_session().__aenter__())
-        try:
-            loop.run_until_complete(vk_service.save_news_to_db(session, news))
-        finally:
-            loop.run_until_complete(session.__aexit__(None, None, None))
+        # Получаем новости
+        news = await vk_service.fetch_news(count=2)
 
-        # Отправляем уведомление в Telegram
-        loop.run_until_complete(bot.__aenter__())
-        try:
-            for event in news:
-                loop.run_until_complete(
-                    bot.send_message(
-                        chat_id=settings.first_superuser_telegram_id,
-                        text=f"Новое событие: {event.get('text', 'Без заголовка')[:100]}\nID: {event['id']}",
-                    )
-                )
-        finally:
-            loop.run_until_complete(bot.__aexit__(None, None, None))
+        # Сохраняем новости в базу данных и отправляем уведомления
+        async with get_async_session() as session:
+            await vk_service.save_news_to_db(session, news)
 
         logger.info("VK news fetch task completed successfully")
         return {"status": "success", "count": len(news)}
@@ -87,16 +59,29 @@ def fetch_and_save_news_task():
         logger.error(f"VK news fetch task failed: {str(e)}", exc_info=True)
         raise
     finally:
-        if not loop.is_closed():
+        if bot:
+            await bot.session.close()
+
+@celery_app.task(name="fetch_and_save_news_task", bind=True)
+def fetch_and_save_news_task(self):
+    """Синхронная обёртка для вызова асинхронной задачи с eventlet."""
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(fetch_and_save_news_task_async())
+        return result
+    except Exception as e:
+        logger.error(f"Task failed: {str(e)}", exc_info=True)
+        raise self.retry(exc=e, max_retries=3, countdown=5)
+    finally:
+        if 'loop' in locals() and not loop.is_closed():
             loop.close()
 
-# Единственный beat_schedule
+# Настройка Celery Beat
 celery_app.conf.beat_schedule = {
     "fetch-vk-news-every-hour": {
         "task": "fetch_and_save_news_task",
         "schedule": crontab(minute=0, hour="*"),
-        "options": {
-            "expires": 60,  # Задача истекает через 60 секунд
-        }
+        "options": {"expires": 60},
     },
 }
