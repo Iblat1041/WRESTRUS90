@@ -47,7 +47,7 @@ async def fetch_and_save_news_task_async():
         vk_service = VKService(bot=bot)
 
         # Получаем новости
-        news = await vk_service.fetch_news(count=2)
+        news = await vk_service.fetch_news(count=5)
 
         # Сохраняем новости в базу данных и отправляем уведомления
         async with get_async_session() as session:

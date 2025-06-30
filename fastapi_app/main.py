@@ -43,10 +43,10 @@ dp.include_routers(
     )
 
 # Применение middleware
-dp.message.middleware(RoleMiddleware())
-dp.message.middleware(DatabaseMiddleware())
-dp.callback_query.middleware(RoleMiddleware())
-dp.callback_query.middleware(DatabaseMiddleware())
+dp.message.middleware(DatabaseMiddleware())  # Сначала DatabaseMiddleware
+dp.message.middleware(RoleMiddleware())      # Затем RoleMiddleware
+dp.callback_query.middleware(DatabaseMiddleware())  # Сначала DatabaseMiddleware
+dp.callback_query.middleware(RoleMiddleware())      # Затем RoleMiddleware
 
 
 @asynccontextmanager

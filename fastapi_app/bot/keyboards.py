@@ -35,15 +35,44 @@ def get_inline_keyboard(
     )
 
 
-MAIN_MENU_KB = get_inline_keyboard(
-    ('Соревнования', 'event'),
-    ('Мероприятия', 'news'),
-    ('Записать ребенка в секцию', 'child_reg'),
-    ('Организация соревнований', 'org_of_comps'),
-    ('Администратор', 'admin'),
-    sizes=(2, 1, 1, 1, 1),  # Обновлен sizes для нового порядка
-    url_buttons=(
+def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
+    """Создает главную клавиатуру с учетом статуса администратора.
+
+    Args:
+        is_admin (bool): Флаг, указывающий, является ли пользователь администратором.
+
+    Returns:
+        InlineKeyboardMarkup: Сформированная клавиатура.
+    """
+    keyboard = InlineKeyboardBuilder()
+
+    # Базовые кнопки для всех пользователей
+    buttons = [
+        ('Соревнования', 'event'),
+        ('Мероприятия', 'news'),
+        ('Записать ребенка в секцию', 'child_reg'),
+        ('Организация соревнований', 'org_of_comps'),
+    ]
+
+    # Добавляем кнопку "Администратор", если пользователь админ
+    if is_admin:
+        buttons.append(('Администратор', 'admin'))
+
+    # Добавляем кнопки в клавиатуру
+    for text, callback_data in buttons:
+        keyboard.add(InlineKeyboardButton(text=text, callback_data=callback_data))
+
+    # Добавляем кнопки с URL для всех пользователей
+    url_buttons = [
         ('Посетить сайт федерации', 'https://wrestrus90.ru'),
         ('Посетить страничку VKontakte', 'https://vk.com/fsbmytishchi'),
+    ]
+    for text, url in url_buttons:
+        keyboard.add(InlineKeyboardButton(text=text, url=url))
+
+    # Настраиваем размеры рядов
+    sizes = (2, 1, 1, 1) if not is_admin else (2, 1, 1, 1, 1)
+
+    return keyboard.adjust(*sizes).as_markup(
+        resize_keyboard=True,
     )
-)

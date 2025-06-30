@@ -1,6 +1,9 @@
 import logging
 import logging.handlers
 import os
+import sys
+
+from fastapi import logger
 
 class SuppressSelectorFilter(logging.Filter):
     def filter(self, record):
@@ -74,19 +77,25 @@ LOGGING_CONFIG = {
             "filters": ["suppress_selector"],
         },
         "celery": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": ["console", "file"],
             "propagate": False,
             "filters": ["suppress_selector"],
         },
         "aiogram": {
-            "level": "INFO",
+            "level": "DEBUG",  # Увеличим до DEBUG для отладки
             "handlers": ["console", "file"],
             "propagate": False,
             "filters": ["suppress_selector"],
         },
         "aiohttp": {
-            "level": "INFO",
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "sqlalchemy": {
+            "level": "DEBUG",  # Добавим для отладки SQL-запросов
             "handlers": ["console", "file"],
             "propagate": False,
             "filters": ["suppress_selector"],
@@ -95,5 +104,12 @@ LOGGING_CONFIG = {
 }
 
 def setup_logging() -> None:
-    os.makedirs(os.path.dirname(LOGGING_CONFIG["handlers"]["file"]["filename"]), exist_ok=True)
-    logging.config.dictConfig(LOGGING_CONFIG)
+    log_dir = os.path.dirname(LOGGING_CONFIG["handlers"]["file"]["filename"])
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        logging.config.dictConfig(LOGGING_CONFIG)
+        logger = logging.getLogger("my_app")
+        logger.debug("Logging setup completed successfully")
+    except Exception as e:
+        print(f"Failed to setup logging: {e}", file=sys.stderr)
+        raise

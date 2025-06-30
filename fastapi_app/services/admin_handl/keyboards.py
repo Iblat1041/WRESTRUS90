@@ -18,7 +18,7 @@ def get_child_registrations_list_keyboard(
         builder.row(
             InlineKeyboardButton(
                 text=text,
-                callback_data=f"child_select_{reg.id}"
+                callback_data=f"child_select_{reg.id}",
             )
         )
     if page > 0:

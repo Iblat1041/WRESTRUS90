@@ -16,6 +16,7 @@ class CRUDEvents(CRUDBase):
         )
         return db_objs.scalars().all()
 
+
     async def get_events_count(self, session: AsyncSession) -> int:
         """Получить общее количество мероприятий."""
         result = await session.execute(
@@ -23,12 +24,17 @@ class CRUDEvents(CRUDBase):
         )
         return result.scalar_one()
 
-    async def get_event_by_id(self, session: AsyncSession, event_id: int) -> Event:
+
+    async def get_event_by_id(
+            self,session: AsyncSession,
+            event_id: int
+            ) -> Event:
         """Получить мероприятие по ID."""
         db_obj = await session.execute(
             select(self.model).where(self.model.id == event_id)
         )
         return db_obj.scalars().first()
+
 
     async def update_event_status(self, session: AsyncSession, event_id: int, status: str) -> bool:
         """Обновить статус мероприятия."""
@@ -40,6 +46,7 @@ class CRUDEvents(CRUDBase):
         await session.refresh(db_obj)
         return True
 
+
     async def update_event_category(self, session: AsyncSession, event_id: int, category: str) -> bool:
         """Обновить категорию мероприятия."""
         db_obj = await self.get_event_by_id(session, event_id)
@@ -49,6 +56,7 @@ class CRUDEvents(CRUDBase):
         await session.commit()
         await session.refresh(db_obj)
         return True
+
 
     async def delete_event(self, session: AsyncSession, event_id: int) -> bool:
         """Удалить мероприятие."""
