@@ -1,4 +1,5 @@
 .:
+app.log
 Dockerfile
 fastapi_app
 infra
@@ -10,12 +11,14 @@ tests
 ./fastapi_app:
 app.log
 bot
+celerybeat-schedule
 constants_kb
 core
 crud
 db
 main.py
 services
+structure.txt
 vk
 
 ./fastapi_app/bot:
@@ -55,6 +58,7 @@ logging_config.cpython-312.pyc
 ./fastapi_app/crud:
 base.py
 child_registrations.py
+events.py
 __init__.py
 __pycache__
 users.py
@@ -62,6 +66,7 @@ users.py
 ./fastapi_app/crud/__pycache__:
 base.cpython-312.pyc
 child_registrations.cpython-312.pyc
+events.cpython-312.pyc
 __init__.cpython-312.pyc
 users.cpython-312.pyc
 
@@ -81,11 +86,12 @@ versions
 env.cpython-312.pyc
 
 ./fastapi_app/db/migrations/versions:
-a3a1ef23adc1_init.py
+56dc47eaa462_init.py
 __init__.py
 __pycache__
 
 ./fastapi_app/db/migrations/versions/__pycache__:
+56dc47eaa462_init.cpython-312.pyc
 a3a1ef23adc1_init.cpython-312.pyc
 d687299583b8_init.cpython-312.pyc
 
@@ -93,6 +99,7 @@ d687299583b8_init.cpython-312.pyc
 admin_handl
 admin.py
 child_handl
+event_handl
 __init__.py
 models.py
 __pycache__
@@ -118,6 +125,15 @@ __pycache__
 handlers.cpython-312.pyc
 __init__.cpython-312.pyc
 
+./fastapi_app/services/event_handl:
+handlers.py
+__init.py
+keyboards.py
+__pycache__
+
+./fastapi_app/services/event_handl/__pycache__:
+handlers.cpython-312.pyc
+
 ./fastapi_app/services/__pycache__:
 admin.cpython-312.pyc
 __init__.cpython-312.pyc
@@ -132,6 +148,7 @@ vk_service.py
 ./fastapi_app/vk/__pycache__:
 celery_app.cpython-312.pyc
 __init__.cpython-312.pyc
+vk_service.cpython-312.pyc
 
 ./infra:
 docker-compose.yml

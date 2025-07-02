@@ -48,8 +48,8 @@ def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
 
     # Базовые кнопки для всех пользователей
     buttons = [
-        ('Соревнования', 'event'),
-        ('Мероприятия', 'news'),
+        ('Соревнования', 'competition'),
+        ('Мероприятия', 'event'),
         ('Записать ребенка в секцию', 'child_reg'),
         ('Организация соревнований', 'org_of_comps'),
     ]

@@ -20,7 +20,7 @@ from bot.handlers import base_router
 from core.config import settings
 from core.init_db import create_first_superuser, init_db
 from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, UserAdmin
-from services import admin_router, child_router
+from services import admin_router, child_router, event_router
 
 # Настройка логирования
 setup_logging()
@@ -40,6 +40,7 @@ dp.include_routers(
     admin_router,
     base_router,
     child_router,
+    event_router
     )
 
 # Применение middleware
