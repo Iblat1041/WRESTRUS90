@@ -47,6 +47,12 @@ class RoleMiddleware(BaseMiddleware):
             logger.error("Session is missing in RoleMiddleware")
             raise ValueError("Сессия не предоставлена")
 
+        # Проверка наличия from_user
+        if not hasattr(event, "from_user") or not event.from_user:
+            logger.debug("No user associated with event, skipping RoleMiddleware")
+            data["is_admin"] = False
+            return await handler(event, data)
+
         user_id = event.from_user.id
         result = await session.execute(
             select(User).where(User.telegram_id == user_id).options(selectinload(User.admin_role))
@@ -54,6 +60,7 @@ class RoleMiddleware(BaseMiddleware):
         user = result.scalars().first()
         is_admin = user and user.admin_role is not None
         data["is_admin"] = is_admin
+        data["user"] = user  # Сохраняем user для использования в обработчиках
 
         if not is_admin and isinstance(event, CallbackQuery) and "admin" in event.data:
             await event.answer("У вас нет прав администратора.", show_alert=True)
