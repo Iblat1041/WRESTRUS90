@@ -4,15 +4,15 @@ from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InputMediaPhoto
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from enum import Enum
 
 from core.db import get_async_session
 from services.event_handl.keyboards import build_event_list_keyboard
 from bot.keyboards import get_main_menu_keyboard
 from services.models import Event, User
-from crud.events import CRUDEvents
-from crud.users import CRUDUsers  # Предполагаемый импорт
+from crud.events import events_crud
+from crud.users import CRUDUsers
 
 # Настройка логирования
 logging.basicConfig(
@@ -24,49 +24,65 @@ logger = logging.getLogger(__name__)
 event_router = Router()
 
 # Инициализация CRUD-объектов
-events_crud = CRUDEvents(Event)
-users_crud = CRUDUsers(User)  # Предполагается, что класс CRUDUsers существует
+users_crud = CRUDUsers(User)
+
+class EventCategory(Enum):
+    COMPETITION = "competition"
+    EVENT = "event"
+    SPONSOR = "sponsor"
 
 class EventState(StatesGroup):
     """Состояния FSM для работы с событиями"""
     START_EVENT = State()      # Состояние просмотра списка событий
     DETAILS_EVENT = State()    # Состояние просмотра деталей события
-    current_page = State()     # Tекущая страница пагинации
+    current_page = State()     # Текущая страница пагинации
     total_pages = State()      # Всего страниц
     message_id = State()       # ID последнего сообщения
     selected_event_id = State()# ID просматриваемого события
+    category = State()         # Категория событий
 
 # region Основные обработчики
 
+
 @event_router.callback_query(F.data == 'competition')
-async def handle_competitions(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def handle_competitions(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Обработчик кнопки 'Соревнования'"""
     await state.set_state(EventState.START_EVENT)
-    await show_event_list(callback, state, page=1)
+    await state.update_data(category=EventCategory.COMPETITION.value)
+    await show_event_list(callback, state, page=1, category=EventCategory.COMPETITION.value)
+
+
+@event_router.callback_query(F.data == 'event')
+async def handle_events(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик кнопки 'Мероприятия'"""
+    await state.set_state(EventState.START_EVENT)
+    await state.update_data(category=EventCategory.EVENT.value)
+    await show_event_list(callback, state, page=1, category=EventCategory.EVENT.value)
+
+
+@event_router.callback_query(F.data == 'sponsor')
+async def handle_sponsors(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик кнопки 'Спонсоры'"""
+    await state.set_state(EventState.START_EVENT)
+    await state.update_data(category=EventCategory.SPONSOR.value)
+    await show_event_list(callback, state, page=1, category=EventCategory.SPONSOR.value)
 
 
 @event_router.callback_query(F.data.startswith('page_'))
-async def handle_pagination(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def handle_pagination(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Обработчик пагинации"""
     try:
         page = int(callback.data.split('_')[1])
-        await show_event_list(callback, state, page)
+        state_data = await state.get_data()
+        category = state_data.get('category', EventCategory.COMPETITION.value)
+        await show_event_list(callback, state, page, category=category)
     except (ValueError, IndexError) as e:
         logger.error(f"Ошибка пагинации: {e}")
         await callback.answer("Ошибка обработки страницы.", show_alert=True)
 
 
 @event_router.callback_query(F.data.startswith('/details_'))
-async def handle_details(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def handle_details(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Обработчик просмотра деталей события"""
     try:
         event_id = int(callback.data.split('_')[1])
@@ -78,15 +94,14 @@ async def handle_details(
 
 
 @event_router.callback_query(F.data.startswith('back_to_list_'))
-async def handle_back_to_list(
-    callback: types.CallbackQuery,
-    state: FSMContext,
-) -> None:
+async def handle_back_to_list(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Обработчик возврата к списку событий"""
     try:
         page = int(callback.data.split('_')[-1])
+        state_data = await state.get_data()
+        category = state_data.get('category', EventCategory.COMPETITION.value)
         await state.set_state(EventState.START_EVENT)
-        await show_event_list(callback, state, page)
+        await show_event_list(callback, state, page, category=category)
     except (ValueError, IndexError) as e:
         logger.error(f"Ошибка возврата: {e}")
         await callback.answer("Ошибка возврата к списку.", show_alert=True)
@@ -97,14 +112,11 @@ async def handle_back_to_menu(
     callback: types.CallbackQuery,
     state: FSMContext,
     session: AsyncSession,
-    **kwargs: Any  # Добавляем kwargs для получения данных из middleware
+    **kwargs: Any
 ) -> None:
     """Обработчик возврата в главное меню"""
     try:
-        # Получаем данные из kwargs (переданные middleware)
         data = kwargs.get('data', {})
-        
-        # Если пользователя нет в данных, пробуем получить его из БД
         if not data.get('user'):
             user = await users_crud.get_user_by_telegram_id(
                 session=session,
@@ -129,15 +141,25 @@ async def show_event_list(
     callback: types.CallbackQuery,
     state: FSMContext,
     page: int,
+    category: str,
     events_per_page: int = 5
 ):
-    """Отображает список событий с пагинацией"""
+    """Отображает список событий с пагинацией для указанной категории"""
     async with get_async_session() as session:
         try:
-            # Получаем общее количество активных соревнований
-            total_events = await events_crud.get_total_active_competitions(session)
+            if category not in [c.value for c in EventCategory]:
+                logger.error(f"Invalid category provided: {category}")
+                await callback.answer("Недопустимая категория.", show_alert=True)
+                return
+
+            # Получаем общее количество событий для категории
+            total_events = await events_crud.get_events_count(
+                session=session,
+                category=category,
+                status="active"
+            )
             if not total_events:
-                await callback.answer("Нет активных соревнований.", show_alert=True)
+                await callback.answer(f"Нет активных {category}.", show_alert=True)
                 return
 
             # Вычисляем параметры пагинации
@@ -149,17 +171,17 @@ async def show_event_list(
                 session=session,
                 offset=(page - 1) * events_per_page,
                 limit=events_per_page,
-                category="competition",
+                category=category,
                 status="active"
             )
 
             # Формируем и отправляем сообщение
             await send_event_list_message(
-                callback, state, current_events, page, total_pages
+                callback, state, current_events, page, total_pages, category
             )
 
         except Exception as e:
-            logger.error(f"Ошибка показа списка: {e}", exc_info=True)
+            logger.error(f"Ошибка показа списка для категории {category}: {e}", exc_info=True)
             await callback.answer("Ошибка загрузки данных.", show_alert=True)
 
 
@@ -227,18 +249,12 @@ async def return_to_main_menu(
 
 # region Вспомогательные функции
 
-def calculate_total_pages(
-    total_items: int,
-    per_page: int,
-) -> int:
+def calculate_total_pages(total_items: int, per_page: int) -> int:
     """Вычисляет общее количество страниц"""
     return max(1, (total_items + per_page - 1) // per_page)
 
 
-def normalize_page_number(
-    page: int,
-    total_pages: int
-) -> int:
+def normalize_page_number(page: int, total_pages: int) -> int:
     """Нормализует номер страницы"""
     return max(1, min(page, total_pages))
 
@@ -248,15 +264,20 @@ async def send_event_list_message(
     state: FSMContext,
     events: list[Event],
     page: int,
-    total_pages: int
+    total_pages: int,
+    category: str
 ) -> None:
     """Формирует и отправляет сообщение со списком событий."""
-    # Максимальная длина заголовка события
+    category_titles = {
+        EventCategory.COMPETITION.value: "🏆 Активные соревнования",
+        EventCategory.EVENT.value: "📅 Активные мероприятия",
+        EventCategory.SPONSOR.value: "🤝 Спонсоры"
+    }
     max_title_length = 30
 
     # Формируем текст сообщения
     message_text = (
-        f"🏆 Активные соревнования (Страница {page}/{total_pages}):\n\n" +
+        f"{category_titles.get(category, 'События')} (Страница {page}/{total_pages}):\n\n" +
         "\n".join(
             f"Пост № <b>{event.id}</b>. <b>{event.title[:max_title_length].capitalize()}"
             f"{'...' if len(event.title) > max_title_length else ''}</b> - "
@@ -285,14 +306,12 @@ async def send_event_list_message(
     await state.update_data(
         current_page=page,
         total_pages=total_pages,
-        message_id=msg.message_id
+        message_id=msg.message_id,
+        category=category
     )
 
 
-async def send_event_content(
-    callback: types.CallbackQuery,
-    event: Event
-):
+async def send_event_content(callback: types.CallbackQuery, event: Event):
     """Отправляет контент события (текст + медиа)"""
     message_text = (
         f"<b>{event.title}</b>\n"
@@ -314,10 +333,7 @@ async def send_event_content(
     await callback.message.answer(message_text, parse_mode='HTML')
 
 
-async def send_back_button(
-    callback: types.CallbackQuery,
-    state: FSMContext
-):
+async def send_back_button(callback: types.CallbackQuery, state: FSMContext):
     """Отправляет кнопку возврата к списку"""
     state_data = await state.get_data()
     current_page = state_data.get('current_page', 1)
@@ -334,11 +350,7 @@ async def send_back_button(
         reply_markup=keyboard
     )
 
-
-async def save_event_view_state(
-    state: FSMContext,
-    event_id: int
-):
+async def save_event_view_state(state: FSMContext, event_id: int):
     """Сохраняет состояние просмотра события"""
     await state.update_data(
         selected_event_id=event_id,

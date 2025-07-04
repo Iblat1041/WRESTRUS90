@@ -27,3 +27,4 @@ prometheus-fastapi-instrumentator
 celery
 redis
 tenacity
+aiocache==0.12.2

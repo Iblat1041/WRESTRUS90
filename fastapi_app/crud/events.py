@@ -1,14 +1,23 @@
-from typing import List
+from aiocache import cached, Cache
+from aiocache.serializers import PickleSerializer
+from enum import Enum
+from typing import List, Optional
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from services.models import Event
 from .base import CRUDBase
+import logging
+
+logger = logging.getLogger(__name__)
+
+class EventCategory(Enum):
+    COMPETITION = "competition"
+    EVENT = "event"
+    SPONSOR = "sponsor"
 
 
 class CRUDEvents(CRUDBase):
-    """Класс для работы с моделью Event в базе данных."""
-
+    @cached(ttl=300, serializer=PickleSerializer(), namespace="events")
     async def get_all_events(
         self,
         session: AsyncSession,
@@ -27,6 +36,7 @@ class CRUDEvents(CRUDBase):
         return db_objs.scalars().all()
 
 
+    @cached(ttl=300, serializer=PickleSerializer(), namespace="events")
     async def get_events_count(
         self,
         session: AsyncSession,
@@ -47,7 +57,7 @@ class CRUDEvents(CRUDBase):
         """Возвращает общее количество активных соревнований."""
         return await self.get_events_count(
             session=session,
-            category="competition", 
+            category=EventCategory.COMPETITION.value,
             status="active"
         )
 
@@ -57,7 +67,7 @@ class CRUDEvents(CRUDBase):
         session: AsyncSession,
         event_id: int,
         status: str | None = None
-    ) -> Event | None:
+    ) -> Optional[Event]:
         """Получить мероприятие по ID с опциональной фильтрацией по статусу."""
         query = select(self.model).where(self.model.id == event_id)
         if status:
@@ -72,30 +82,53 @@ class CRUDEvents(CRUDBase):
             update(self.model).where(self.model.id == event_id).values(status=status)
         )
         if result.rowcount == 0:
+            logger.warning(f"Event with id={event_id} not found for status update")
             return False
         await session.commit()
+        logger.info(f"Successfully updated status for event_id={event_id} to {status}")
+        await Cache(Cache.MEMORY).delete(f"get_all_events:{status}:active")
+        await Cache(Cache.MEMORY).delete(f"get_events_count:{status}:active")
         return True
 
 
-    async def update_event_category(self, session: AsyncSession, event_id: int, category: str) -> bool:
+    async def update_event_category(self, session: AsyncSession, event_id: int, category: str, commit: bool = True) -> bool:
         """Обновить категорию мероприятия."""
-        result = await session.execute(
-            update(self.model).where(self.model.id == event_id).values(category=category)
-        )
-        if result.rowcount == 0:
-            return False
-        await session.commit()
-        return True
+        try:
+            if category not in [c.value for c in EventCategory]:
+                logger.error(f"Invalid category provided: {category}")
+                raise ValueError(f"Недопустимая категория: {category}. Допустимые значения: {[c.value for c in EventCategory]}")
+            
+            logger.debug(f"Updating category for event_id={event_id} to category={category}")
+            result = await session.execute(
+                update(self.model).where(self.model.id == event_id).values(category=category)
+            )
+            if result.rowcount == 0:
+                logger.warning(f"Event with id={event_id} not found for category update")
+                return False
+            
+            if commit:
+                await session.commit()
+                logger.info(f"Successfully updated category for event_id={event_id} to {category}")
+                await Cache(Cache.MEMORY).delete(f"get_all_events:{category}:active")
+                await Cache(Cache.MEMORY).delete(f"get_events_count:{category}:active")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error updating category for event_id={event_id}: {e}", exc_info=True)
+            raise
 
 
     async def delete_event(self, session: AsyncSession, event_id: int) -> bool:
         """Удалить мероприятие."""
         db_obj = await self.get_event_by_id(session, event_id)
         if not db_obj:
+            logger.warning(f"Event with id={event_id} not found for deletion")
             return False
         await session.delete(db_obj)
         await session.commit()
+        logger.info(f"Successfully deleted event_id={event_id}")
+        await Cache(Cache.MEMORY).delete(f"get_all_events:{db_obj.category}:active")
+        await Cache(Cache.MEMORY).delete(f"get_events_count:{db_obj.category}:active")
         return True
-
 
 events_crud = CRUDEvents(Event)
