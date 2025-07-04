@@ -1,32 +1,30 @@
-#!/usr/bin/env python3
-"""Основной файл приложения FastAPI с интеграцией aiogram и fastadmin."""
-
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
 import logging
 import logging.config
 
-from core.logging_config import LOGGING_CONFIG
+from core.logging_config import LOGGING_CONFIG, setup_logging
 
 from bot.middleware import DatabaseMiddleware, RoleMiddleware
 import uvicorn
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
 from fastadmin import fastapi_app as admin_app
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from bot.handlers import base_router
 from core.config import settings
 from core.init_db import create_first_superuser, init_db
 from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, UserAdmin
-from services import admin_router, child_router
+from services import admin_router, child_router, event_router
 
-# Настройка централизованного логирования
-logging.config.dictConfig(LOGGING_CONFIG)
-logger = logging.getLogger("my_app")  # Используем логгер 'my_app' из конфигурации
+# Настройка логирования
+setup_logging()
+logger = logging.getLogger("my_app")
 
 
 # Инициализация бота
@@ -34,7 +32,7 @@ bot = Bot(
     token=settings.telegram_bot_token,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
-storage = MemoryStorage()
+storage = RedisStorage.from_url(settings.redis_url)  # Используем redis_url из settings
 dp = Dispatcher(storage=storage)
 
 # Регистрация маршрутов
@@ -42,13 +40,14 @@ dp.include_routers(
     admin_router,
     base_router,
     child_router,
+    event_router
     )
 
 # Применение middleware
-dp.message.middleware(RoleMiddleware())
-dp.message.middleware(DatabaseMiddleware())
-dp.callback_query.middleware(RoleMiddleware())
-dp.callback_query.middleware(DatabaseMiddleware())
+dp.message.middleware(DatabaseMiddleware())  # Сначала DatabaseMiddleware
+dp.message.middleware(RoleMiddleware())      # Затем RoleMiddleware
+dp.callback_query.middleware(DatabaseMiddleware())  # Сначала DatabaseMiddleware
+dp.callback_query.middleware(RoleMiddleware())      # Затем RoleMiddleware
 
 
 @asynccontextmanager
@@ -82,6 +81,8 @@ app = FastAPI(lifespan=lifespan)
 logger.info("Монтирование админ-панели fastadmin...")
 app.mount("/admin", admin_app)
 
+# Настройка Prometheus метрик
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 if __name__ == "__main__":
     """Точка входа для запуска приложения с uvicorn."""

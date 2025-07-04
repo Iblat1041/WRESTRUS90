@@ -34,6 +34,10 @@ pre-commit install
 ```bash
 cd infra
 ```
+2. Запустите (app, celery_worker, celery_beat) обращаются к redis (для Celery и FSM) и db `docker-compose.production.yml`:
+```bash
+docker-compose -f docker-compose.production.yml up -d
+```
 
 2. Запустите PostgreSQL в Docker, используя файл `docker-compose.yml`:
 ```bash
@@ -146,8 +150,62 @@ cd django_app
 http://localhost:8443/admin/
 ```
 
+# Подключитесь к базе данных в pgAdmin
+
+Шаг 2: Подключитесь к базе данных в pgAdmin
+
+Откройте pgAdmin в браузере перейдите по адресу:
+
+```bash
+http://localhost:5050
+```
+
+Войдите с учетными данными:
+```bash
+Email: admin@example.com
+Password: admin
+```
+Настройте подключение (если еще не настроено):
+
+```bash
+В левой панели щелкните правой кнопкой мыши на Servers > Register > Server.
+Введите имя сервера, например, dbwrest.
+Вкладка Connection:
+Host name/address: db (имя сервиса PostgreSQL в Docker-сети).
+Port: 5432 (внутренний порт PostgreSQL).
+Maintenance database: dbwrest.
+Username: wrest.
+Password: wrest.
+Нажмите Save.
+```
+
+# Celery локальный запуск
+
+Запуск из /WRESTRUS90/fastapi_app:
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)/..
+```
+
+Celery Worker — рабочий процесс, который выполняет задачи, отправленные в очередь через Redis. Worker "слушает" очередь задач и выполняет их, когда они поступают от Celery Beat
+``` bash
+celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=DEBUG
+```
+Эта команда запускает Celery Beat — планировщик задач, который отвечает за запуск периодических задач по расписанию, определённому в конфигурации Celery
+``` bash
+celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
+```
+
 ## Вход в панель администрирования
 
 Откройте в браузере: сгенерированный URL + /admin/ (например, https://ваш_субдомен.loca.lt/admin/)
 
 Используйте данные суперпользователя из файла `.env` для входа.
+
+```bash
+https://id.vk.com/about/business/go/accounts/230078/apps/53825466/edit
+```
+
+Обновление записей
+```bash
+celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
+```

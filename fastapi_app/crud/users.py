@@ -2,6 +2,7 @@ from typing import Any, Optional, Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from crud.base import CRUDBase
 from services.models import User
@@ -17,9 +18,9 @@ class CRUDUsers(CRUDBase):
     ) -> Optional[User]:
         """Получение юзера по telegram id."""
         result = await session.execute(
-            select(self.model).where(
-                self.model.telegram_id == telegram_id,
-            ),
+            select(self.model)
+            .where(self.model.telegram_id == telegram_id)
+            .options(selectinload(self.model.admin_role))  # Загружаем admin_role
         )
         return result.scalars().first()
 

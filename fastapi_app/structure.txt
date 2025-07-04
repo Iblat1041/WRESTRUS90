@@ -1,15 +1,5 @@
 .:
 app.log
-Dockerfile
-fastapi_app
-infra
-README.md
-requirements.txt
-structure.txt
-tests
-
-./fastapi_app:
-app.log
 bot
 celerybeat-schedule
 constants_kb
@@ -21,7 +11,7 @@ services
 structure.txt
 vk
 
-./fastapi_app/bot:
+./bot:
 handlers.py
 __init__.py
 keyboards.py
@@ -29,17 +19,17 @@ logger.py
 middleware.py
 __pycache__
 
-./fastapi_app/bot/__pycache__:
+./bot/__pycache__:
 handlers.cpython-312.pyc
 __init__.cpython-312.pyc
 keyboards.cpython-312.pyc
 logger.cpython-312.pyc
 middleware.cpython-312.pyc
 
-./fastapi_app/constants_kb:
+./constants_kb:
 admin.py
 
-./fastapi_app/core:
+./core:
 base.py
 config.py
 db.py
@@ -48,14 +38,14 @@ __init__.py
 logging_config.py
 __pycache__
 
-./fastapi_app/core/__pycache__:
+./core/__pycache__:
 config.cpython-312.pyc
 db.cpython-312.pyc
 __init__.cpython-312.pyc
 init_db.cpython-312.pyc
 logging_config.cpython-312.pyc
 
-./fastapi_app/crud:
+./crud:
 base.py
 child_registrations.py
 events.py
@@ -63,39 +53,37 @@ __init__.py
 __pycache__
 users.py
 
-./fastapi_app/crud/__pycache__:
+./crud/__pycache__:
 base.cpython-312.pyc
 child_registrations.cpython-312.pyc
-events.cpython-312.pyc
 __init__.cpython-312.pyc
 users.cpython-312.pyc
 
-./fastapi_app/db:
+./db:
 alembic.ini
 __init__.py
 migrations
 
-./fastapi_app/db/migrations:
+./db/migrations:
 env.py
 __pycache__
 README
 script.py.mako
 versions
 
-./fastapi_app/db/migrations/__pycache__:
+./db/migrations/__pycache__:
 env.cpython-312.pyc
 
-./fastapi_app/db/migrations/versions:
-56dc47eaa462_init.py
+./db/migrations/versions:
+a3a1ef23adc1_init.py
 __init__.py
 __pycache__
 
-./fastapi_app/db/migrations/versions/__pycache__:
-56dc47eaa462_init.cpython-312.pyc
+./db/migrations/versions/__pycache__:
 a3a1ef23adc1_init.cpython-312.pyc
 d687299583b8_init.cpython-312.pyc
 
-./fastapi_app/services:
+./services:
 admin_handl
 admin.py
 child_handl
@@ -105,58 +93,42 @@ models.py
 __pycache__
 vk_service.py
 
-./fastapi_app/services/admin_handl:
+./services/admin_handl:
 handlers.py
 __init__.py
 keyboards.py
 __pycache__
 
-./fastapi_app/services/admin_handl/__pycache__:
+./services/admin_handl/__pycache__:
 handlers.cpython-312.pyc
 __init__.cpython-312.pyc
 keyboards.cpython-312.pyc
 
-./fastapi_app/services/child_handl:
+./services/child_handl:
 handlers.py
 __init__.py
 __pycache__
 
-./fastapi_app/services/child_handl/__pycache__:
+./services/child_handl/__pycache__:
 handlers.cpython-312.pyc
 __init__.cpython-312.pyc
 
-./fastapi_app/services/event_handl:
+./services/event_handl:
 handlers.py
 __init.py
-keyboards.py
-__pycache__
 
-./fastapi_app/services/event_handl/__pycache__:
-handlers.cpython-312.pyc
-
-./fastapi_app/services/__pycache__:
+./services/__pycache__:
 admin.cpython-312.pyc
 __init__.cpython-312.pyc
 models.cpython-312.pyc
 
-./fastapi_app/vk:
+./vk:
 celery_app.py
 __init__.py
 __pycache__
 vk_service.py
 
-./fastapi_app/vk/__pycache__:
+./vk/__pycache__:
 celery_app.cpython-312.pyc
 __init__.cpython-312.pyc
 vk_service.cpython-312.pyc
-
-./infra:
-docker-compose.yml
-
-./tests:
-__init__.py
-test_api.py
-test_child_registration.py
-test_crud.py
-test_telegram.py
-test_vk_integration.py

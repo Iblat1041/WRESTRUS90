@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_async_session
-from bot.keyboards import MAIN_MENU_KB
+from bot.keyboards import get_main_menu_keyboard
 from services.models import ChildRegistration, User
 
 child_router = Router()
@@ -95,6 +95,9 @@ async def process_parent_contact(
         session.add(user)
         await session.flush()  # Получаем ID пользователя
 
+    is_admin = user.admin_role is not None
+    main_menu_kb = get_main_menu_keyboard(is_admin=is_admin)
+
     # Сохранение регистрации ребенка
     child_reg = ChildRegistration(
         user_id=user.id,
@@ -116,5 +119,5 @@ async def process_parent_contact(
     await state.clear()
     await message.answer(
         "Регистрация ребенка успешно завершена!",
-        reply_markup=MAIN_MENU_KB,
+        reply_markup=main_menu_kb,
     )

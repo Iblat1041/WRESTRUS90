@@ -20,8 +20,8 @@ Base = declarative_base(cls=PreBase)
 # Настройка асинхронного движка
 engine = create_async_engine(
     settings.database_url,
-    echo=False,
-    pool_size=5,
+    echo=True,  # Для отладки, можно отключить в продакшене
+    pool_size=5,  # Ограничение пула соединений
     max_overflow=10,
 )
 

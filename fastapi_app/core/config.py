@@ -1,5 +1,6 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
 
 class Settings(BaseSettings):
     """Настройки приложения для интеграции Django, FastAPI и Telegram-бота."""
@@ -13,6 +14,15 @@ class Settings(BaseSettings):
 
     # Telegram-бот
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
+
+    # Redis
+    redis_host: str = Field(alias="REDIS_HOST", default="redis")
+    redis_port: int = Field(alias="REDIS_PORT", default=6379)
+
+    # VK API
+    answer_telegram_id: str = Field(alias="ANSWER_TELEGRAM_ID")
+    vk_access_token: str = Field(alias="VK_ACCESS_TOKEN")
+    vk_group_id: str = Field(alias="VK_GROUP_ID")
 
     # Данные первого суперпользователя
     first_superuser_first_name: str = Field(alias="FIRST_SUPERUSER_FIRST_NAME")
@@ -32,10 +42,26 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Создание строки подключения к базе данных для asyncpg."""
+        host = (
+        "localhost"
+        if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
+        else self.postgres_server
+        )
+        port = 5000 if host == "localhost" else 5432
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@"
-            f"{self.postgres_server}:{self.postgres_port}/{self.postgres_db}"
+            f"{host}:{port}/{self.postgres_db}"
         )
+
+    @property
+    def redis_url(self) -> str:
+        """Создание строки подключения к Redis."""
+        host = (
+        "localhost"
+        if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
+        else self.redis_host
+        )
+        return f"redis://{host}:{self.redis_port}/0"
 
     model_config = SettingsConfigDict(
         env_file="../infra/.env",  # Путь относительно текущей директории

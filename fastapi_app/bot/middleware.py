@@ -1,12 +1,14 @@
+import logging
 from aiogram import BaseMiddleware
-
-from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
+from aiogram.types import TelegramObject, CallbackQuery
 from typing import Callable, Dict, Any, Awaitable
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from core.db import async_session_maker  # Убедитесь, что путь к async_session_maker верен
+from sqlalchemy import select
+from core.db import async_session_maker
+from sqlalchemy.orm import selectinload
+from services.models import User
 
+logger = logging.getLogger(__name__)
 
 class DatabaseMiddleware(BaseMiddleware):
     async def __call__(
@@ -16,9 +18,21 @@ class DatabaseMiddleware(BaseMiddleware):
         data: Dict[str, Any]
     ) -> Any:
         async with async_session_maker() as session:
-            data["session"] = session  # Передаем сессию в данные
-            result = await handler(event, data)
-            return result
+            logger.debug("Session created in DatabaseMiddleware: %s", type(session))
+            data["session"] = session
+            try:
+                # Вызываем следующий обработчик
+                result = await handler(event, data)
+                await session.commit()
+                logger.debug("Transaction committed successfully")
+                return result
+            except Exception as e:
+                await session.rollback()
+                logger.error("Database error: %s", str(e), exc_info=True)
+                raise
+            finally:
+                await session.close()
+                logger.debug("Session closed")
 
 
 class RoleMiddleware(BaseMiddleware):
@@ -28,12 +42,28 @@ class RoleMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        session = data.get("session")
+        if not session:
+            logger.error("Session is missing in RoleMiddleware")
+            raise ValueError("Сессия не предоставлена")
+
+        # Проверка наличия from_user
+        if not hasattr(event, "from_user") or not event.from_user:
+            logger.debug("No user associated with event, skipping RoleMiddleware")
+            data["is_admin"] = False
+            return await handler(event, data)
+
         user_id = event.from_user.id
-        # Пример проверки роли (замените на свою логику)
-        is_admin = False  # Здесь должна быть проверка из базы данных
+        result = await session.execute(
+            select(User).where(User.telegram_id == user_id).options(selectinload(User.admin_role))
+        )
+        user = result.scalars().first()
+        is_admin = user and user.admin_role is not None
         data["is_admin"] = is_admin
-        if not is_admin and "admin" in data.get("callback_data", ""):
-            await event.answer("У вас нет прав администратора.")
-            return  # Прерываем обработку, если нет прав
-        result = await handler(event, data)
-        return result
+        data["user"] = user  # Сохраняем user для использования в обработчиках
+
+        if not is_admin and isinstance(event, CallbackQuery) and "admin" in event.data:
+            await event.answer("У вас нет прав администратора.", show_alert=True)
+            return
+
+        return await handler(event, data)
