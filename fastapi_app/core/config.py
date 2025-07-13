@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     redis_port: int = Field(alias="REDIS_PORT", default=6379)
 
     # VK API
-    answer_telegram_id: str = Field(alias="ANSWER_TELEGRAM_ID")
+    # answer_telegram_id: str = Field(alias="ANSWER_TELEGRAM_ID")
     vk_access_token: str = Field(alias="VK_ACCESS_TOKEN")
     vk_group_id: str = Field(alias="VK_GROUP_ID")
 

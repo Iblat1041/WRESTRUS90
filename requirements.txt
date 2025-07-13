@@ -24,7 +24,5 @@ passlib[bcrypt]==1.7.4
 fastadmin[fastapi,django]
 aiogram[redis]
 prometheus-fastapi-instrumentator
-celery
-redis
 tenacity
 aiocache==0.12.2
