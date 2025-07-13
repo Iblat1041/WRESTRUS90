@@ -1,0 +1,98 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_container
+    env_file:
+      - ./.env
+    ports:
+      - "5000:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: redis_container
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_container
+    env_file:
+      - ./.env
+    environment:
+      - RUNNING_IN_DOCKER=true
+    ports:
+      - "8888:8888"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./fastapi_app:/app/fastapi_app
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin_container
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery_container
+    command: celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=info
+    env_file:
+      - ./.env
+    environment:
+      - RUNNING_IN_DOCKER=true
+      - REDIS_HOST=redis
+      - POSTGRES_SERVER=db
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./fastapi_app:/app/fastapi_app
+    restart: unless-stopped
+
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery_beat_container
+    command: celery -A fastapi_app.vk.celery_app.celery_app beat --loglevel=info
+    env_file:
+      - ./.env
+    environment:
+      - RUNNING_IN_DOCKER=true
+      - REDIS_HOST=redis
+      - POSTGRES_SERVER=db
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./fastapi_app:/app/fastapi_app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
