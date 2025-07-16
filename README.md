@@ -218,6 +218,11 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A fastapi_app.vk.celery_app.c
 ``` bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
 ```
+Проверка 
+```
+curl "https://api.vk.com/method/wall.get?access_token=ВАШ_ТОКЕН&v=5.131&owner_id=-209183356&count=5&extended=1"
+```
+
 
 ## Вход в панель администрирования
 
