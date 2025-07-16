@@ -7,4 +7,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ./fastapi_app /app/fastapi_app
 
-CMD ["uvicorn", "fastapi_app.main:app", "--host", "0.0.0.0", "--port", "8888"]
+EXPOSE 8000
+CMD alembic -c db/alembic.ini revision --autogenerate -m 'init' ; alembic -c db/alembic.ini upgrade head ; python main.py

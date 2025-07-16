@@ -212,11 +212,11 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/..
 
 Celery Worker — рабочий процесс, который выполняет задачи, отправленные в очередь через Redis. Worker "слушает" очередь задач и выполняет их, когда они поступают от Celery Beat
 ``` bash
-celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=DEBUG
+export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=DEBUG
 ```
 Эта команда запускает Celery Beat — планировщик задач, который отвечает за запуск периодических задач по расписанию, определённому в конфигурации Celery
 ``` bash
-celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
+export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
 ```
 
 ## Вход в панель администрирования
