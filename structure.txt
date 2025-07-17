@@ -1,22 +1,23 @@
 .:
 app.log
-Dockerfile
 fastapi_app
 infra
+pyproject.toml
 README.md
 requirements.txt
 structure.txt
 tests
 
 ./fastapi_app:
-app.log
 bot
 celerybeat-schedule
 constants_kb
 core
 crud
 db
+__init__.py
 main.py
+__pycache__
 services
 structure.txt
 vk
@@ -86,14 +87,17 @@ versions
 env.cpython-312.pyc
 
 ./fastapi_app/db/migrations/versions:
-56dc47eaa462_init.py
+e41335647936_init.py
 __init__.py
 __pycache__
 
 ./fastapi_app/db/migrations/versions/__pycache__:
 56dc47eaa462_init.cpython-312.pyc
-a3a1ef23adc1_init.cpython-312.pyc
-d687299583b8_init.cpython-312.pyc
+6a9337ecf074_init.cpython-312.pyc
+e41335647936_init.cpython-312.pyc
+
+./fastapi_app/__pycache__:
+__init__.cpython-312.pyc
 
 ./fastapi_app/services:
 admin_handl
@@ -133,6 +137,7 @@ __pycache__
 
 ./fastapi_app/services/event_handl/__pycache__:
 handlers.cpython-312.pyc
+keyboards.cpython-312.pyc
 
 ./fastapi_app/services/__pycache__:
 admin.cpython-312.pyc
@@ -151,7 +156,10 @@ __init__.cpython-312.pyc
 vk_service.cpython-312.pyc
 
 ./infra:
+docker-compose.local.yml
+docker-compose.production.yml
 docker-compose.yml
+Dockerfile
 
 ./tests:
 __init__.py

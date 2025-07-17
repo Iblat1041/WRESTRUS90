@@ -18,9 +18,9 @@ logger = logging.getLogger("my_app.celery")
 # Инициализация Celery
 celery_app = Celery(
     "vk_news",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
-    include=["fastapi_app.vk.celery_app"],
+    broker=settings.redis_url,  # Используем настройки из config
+    backend=settings.redis_url,
+    include=["vk.celery_app"],
 )
 
 # Конфигурация Celery

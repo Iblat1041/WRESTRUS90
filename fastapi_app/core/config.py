@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     postgres_password: str = Field(alias="POSTGRES_PASSWORD")
     postgres_db: str = Field(alias="POSTGRES_DB")
     postgres_server: str = Field(alias="POSTGRES_SERVER", default="localhost")
-    postgres_port: int = Field(alias="POSTGRES_PORT", default=5000)
+    postgres_port_prod: int = Field(alias="POSTGRES_PORT_PROD", default=5432)
+    postgres_port_local: int = Field(alias="POSTGRES_PORT_LOCAL", default=5000)
 
     # Telegram-бот
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
@@ -41,13 +42,16 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """Создание строки подключения к базе данных для asyncpg."""
+        """Создание строки подключения к базе:
+        false - локальная разработка
+        True - запуск в контейнере
+        """
         host = (
         "localhost"
         if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
         else self.postgres_server
         )
-        port = 5000 if host == "localhost" else 5432
+        port = self.postgres_port_local if host == "localhost" else self.postgres_port_prod
         return (
             f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@"
             f"{host}:{port}/{self.postgres_db}"
