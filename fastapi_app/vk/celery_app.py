@@ -20,7 +20,7 @@ celery_app = Celery(
     "vk_news",
     broker=settings.redis_url,  # Используем настройки из config
     backend=settings.redis_url,
-    include=["fastapi_app.vk.celery_app"],
+    include=["vk.celery_app"],
 )
 
 # Конфигурация Celery

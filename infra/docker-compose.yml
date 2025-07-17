@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: postgres_dev
+    container_name: postgres_local
     env_file:
       - .env
     ports:
@@ -22,7 +22,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: redis_dev
+    container_name: redis_local
     ports:
       - "6379:6379"
     volumes:
@@ -39,20 +39,42 @@ services:
           cpus: '0.25'
           memory: 256M
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin_container
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    env_file:
+      - .env
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
   fastapi:
     build:
       context: ..
       dockerfile: Dockerfile
     container_name: fastapi_container
-    command: sh -c "export PYTHONPATH=/app:/app/fastapi_app && alembic -c db/alembic.ini upgrade head && python fastapi_app/main.py"
-    env_file: 
+    env_file:
       - .env
     environment:
       - RUNNING_IN_DOCKER=true
+      - PYTHONPATH=/app
     ports:
       - "8000:8000"
     volumes:
-      - ../fastapi_app:/app/fastapi_app:ro
+      - ../fastapi_app:/app:ro  # Изменено с /app/fastapi_app на /app
     depends_on:
       db:
         condition: service_healthy
@@ -70,11 +92,12 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: celery_worker
-    command: sh -c "export PYTHONPATH=/app:/app/fastapi_app && celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=info --concurrency=2"
-    env_file: 
+    command: ["celery", "-A", "vk.celery_app.celery_app", "worker", "--loglevel=DEBUG", "--concurrency=1"]
+    env_file:
       - .env
     environment:
       - RUNNING_IN_DOCKER=true
+      - PYTHONPATH=/app
     depends_on:
       db:
         condition: service_healthy
@@ -91,10 +114,13 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: celery_beat
-    command: sh -c "export PYTHONPATH=/app:/app/fastapi_app && celery -A fastapi_app.vk.celery_app.celery_app beat --loglevel=info"
-    env_file: 
+    container_name: celery_beat_container
+    command: ["celery", "-A", "vk.celery_app.celery_app", "beat", "--loglevel=DEBUG"]
+    env_file:
       - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+      - PYTHONPATH=/app
     depends_on:
       db:
         condition: service_healthy
@@ -104,30 +130,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: 256M
-
-  pgadmin:
-    image: dpage/pgadmin4:8
-    container_name: pgadmin_container
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-    env_file: 
-      - .env
-    ports:
-      - "5050:80"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.5'
+          memory: 512M
 
 volumes:
   postgres_data:

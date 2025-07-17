@@ -238,3 +238,7 @@ https://id.vk.com/about/business/go/accounts/230078/apps/53825466/edit
 ```bash
 celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
 ```
+
+```
+docker logs celery_worker
+```

@@ -1,8 +1,8 @@
 .:
 app.log
-Dockerfile
 fastapi_app
 infra
+pyproject.toml
 README.md
 requirements.txt
 structure.txt
@@ -17,6 +17,7 @@ crud
 db
 __init__.py
 main.py
+__pycache__
 services
 structure.txt
 vk
@@ -95,6 +96,9 @@ __pycache__
 6a9337ecf074_init.cpython-312.pyc
 e41335647936_init.cpython-312.pyc
 
+./fastapi_app/__pycache__:
+__init__.cpython-312.pyc
+
 ./fastapi_app/services:
 admin_handl
 admin.py
@@ -155,6 +159,7 @@ vk_service.cpython-312.pyc
 docker-compose.local.yml
 docker-compose.production.yml
 docker-compose.yml
+Dockerfile
 
 ./tests:
 __init__.py
