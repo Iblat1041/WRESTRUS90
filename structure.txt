@@ -1,5 +1,7 @@
 .:
 app.log
+Dockerfile
+Dokerfile.copy
 fastapi_app
 infra
 pyproject.toml
@@ -156,10 +158,12 @@ __init__.cpython-312.pyc
 vk_service.cpython-312.pyc
 
 ./infra:
-docker-compose.local.yml
 docker-compose.production.yml
 docker-compose.yml
-Dockerfile
+fastapi_app
+show_container_logs.sh
+
+./infra/fastapi_app:
 
 ./tests:
 __init__.py

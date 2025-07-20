@@ -1,43 +1,43 @@
-version: '3.8'
-
 services:
   db:
-    image: postgres:16
-    container_name: postgres_container
+    image: postgres:16-alpine
+    container_name: postgres_prod
     env_file:
-      - ./.env
+      - .env
     ports:
       - "5000:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   redis:
-    image: redis:7
-    container_name: redis_container
+    image: redis:7-alpine
+    container_name: redis_prod
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
-
-  fastapi:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fastapi_container
-    env_file:
-      - ./.env
-    environment:
-      - RUNNING_IN_DOCKER=true
-    ports:
-      - "8888:8888"
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./fastapi_app:/app/fastapi_app
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
 
   pgadmin:
     image: dpage/pgadmin4:8
@@ -45,52 +45,89 @@ services:
     environment:
       - PGADMIN_DEFAULT_EMAIL=admin@example.com
       - PGADMIN_DEFAULT_PASSWORD=admin
+    env_file:
+      - .env
     ports:
       - "5050:80"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  fastapi:
+    image: blathata/wrest_backend:latest
+    container_name: fastapi_container
+    env_file:
+      - .env
+    environment:
+      - RUNNING_IN_DOCKER=true
+      - PYTHONPATH=/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
 
   celery:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: celery_container
-    command: celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=info
+    image: blathata/wrest_backend:latest
+    container_name: celery_worker
+    command: ["celery", "-A", "vk.celery_app.celery_app", "worker", "--loglevel=DEBUG", "--concurrency=1"]
     env_file:
-      - ./.env
+      - .env
     environment:
       - RUNNING_IN_DOCKER=true
-      - REDIS_HOST=redis
-      - POSTGRES_SERVER=db
+      - PYTHONPATH=/app
     depends_on:
-      - db
-      - redis
-    volumes:
-      - ./fastapi_app:/app/fastapi_app
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fastapi:
+        condition: service_started
     restart: unless-stopped
-
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   celery_beat:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: blathata/wrest_backend:latest
     container_name: celery_beat_container
-    command: celery -A fastapi_app.vk.celery_app.celery_app beat --loglevel=info
+    command: ["celery", "-A", "vk.celery_app.celery_app", "beat", "--loglevel=DEBUG"]
     env_file:
-      - ./.env
+      - .env
     environment:
       - RUNNING_IN_DOCKER=true
-      - REDIS_HOST=redis
-      - POSTGRES_SERVER=db
+      - PYTHONPATH=/app
     depends_on:
-      - db
-      - redis
-    volumes:
-      - ./fastapi_app:/app/fastapi_app
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fastapi:
+        condition: service_started
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
 volumes:
   postgres_data:
