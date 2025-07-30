@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: postgres_local
+    container_name: postgres_prod
     env_file:
       - .env
     ports:
@@ -22,7 +22,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: redis_local
+    container_name: redis_prod
     ports:
       - "6379:6379"
     volumes:
@@ -36,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
+          cpus: '0.2'
           memory: 256M
 
   pgadmin:
@@ -58,13 +58,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.1'
+          memory: 128M
 
   fastapi:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: blathata/wrest_backend:latest
     container_name: fastapi_container
     env_file:
       - .env
@@ -73,8 +71,6 @@ services:
       - PYTHONPATH=/app
     ports:
       - "8000:8000"
-    volumes:
-      - ../fastapi_app:/app:ro  # Изменено с /app/fastapi_app на /app
     depends_on:
       db:
         condition: service_healthy
@@ -84,13 +80,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1G
+          cpus: '0.3'
+          memory: 512M
 
   celery:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: blathata/wrest_backend:latest
     container_name: celery_worker
     command: ["celery", "-A", "vk.celery_app.celery_app", "worker", "--loglevel=DEBUG", "--concurrency=1"]
     env_file:
@@ -109,13 +103,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.2'
+          memory: 256M
 
   celery_beat:
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: blathata/wrest_backend:latest
     container_name: celery_beat_container
     command: ["celery", "-A", "vk.celery_app.celery_app", "beat", "--loglevel=DEBUG"]
     env_file:
@@ -134,8 +126,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.1'
+          memory: 128M
 
 volumes:
   postgres_data:

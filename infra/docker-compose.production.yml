@@ -18,7 +18,7 @@ services:
       resources:
         limits:
           cpus: '0.5'
-          memory: 512M
+          memory: 800M
 
   redis:
     image: redis:7-alpine
@@ -39,28 +39,6 @@ services:
           cpus: '0.2'
           memory: 256M
 
-  pgadmin:
-    image: dpage/pgadmin4:8
-    container_name: pgadmin_container
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-    env_file:
-      - .env
-    ports:
-      - "5050:80"
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: 128M
-
   fastapi:
     image: blathata/wrest_backend:latest
     container_name: fastapi_container
@@ -80,8 +58,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.3'
-          memory: 512M
+          cpus: '0.2'
+          memory: 256M
 
   celery:
     image: blathata/wrest_backend:latest
