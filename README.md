@@ -86,6 +86,10 @@ cd infra
 ```bash
 docker-compose -f docker-compose.production.yml up -d
 ```
+Для отладки перезапуск celery_beat celery fastapi:
+```
+docker build -t blathata/wrest_backend .. && docker push blathata/wrest_backend:latest && docker-compose -f docker-compose.production.yml up -d --build --force-recreate celery_beat celery fastapi
+```
 
 2. Запустите PostgreSQL в Docker, используя файл `docker-compose.yml`:
 ```bash
@@ -112,8 +116,7 @@ docker-compose -f docker-compose.yml logs
 
 1. Клонируйте репозиторий:
 ```bash
-git clone <url-репозитория>
-cd smena_collective_team2
+git clone git@github.com:Iblat1041/WRESTRUS90.git
 ```
 
 2. Создайте виртуальное окружение:
@@ -141,9 +144,9 @@ pip install -r src/requirements.txt
 
 ## Запуск проекта
 
-1. Перейдите в папку `src`:
+1. Перейдите в папку `fastapi_app`:
 ```bash
-cd src
+cd fastapi_app/
 ```
 
 2. Создайте новые миграции (также при изменении моделей применять):
@@ -161,22 +164,17 @@ alembic -c db/alembic.ini upgrade head
 python main.py
 ```
 
-## Запуск админ MAin
+## Запуск админки.
 
-1. Перейдите в папку `django_app`:
+ Запустите админки:
 ```bash
-cd django_app
-```
-
-
-4. Запустите админки:
-```bash
-http://localhost:8443/admin/
+http://127.0.0.1:8000/admin
 ```
 
 # Подключитесь к базе данных в pgAdmin
 
-Шаг 2: Подключитесь к базе данных в pgAdmin
+
+##Подключитесь к базе данных в pgAdmin
 
 Откройте pgAdmin в браузере перейдите по адресу:
 
@@ -184,31 +182,28 @@ http://localhost:8443/admin/
 http://localhost:5050
 ```
 
-Войдите с учетными данными:
+Войдите с учетными данными настройка в .env:
 ```bash
 Email: admin@example.com
 Password: admin
 ```
-Настройте подключение (если еще не настроено):
+Настройка подключения :
 
 ```bash
 В левой панели щелкните правой кнопкой мыши на Servers > Register > Server.
 Введите имя сервера, например, dbwrest.
 Вкладка Connection:
 Host name/address: db (имя сервиса PostgreSQL в Docker-сети).
-Port: 5432 (внутренний порт PostgreSQL).
+Port: 5432.
 Maintenance database: dbwrest.
 Username: wrest.
 Password: wrest.
 Нажмите Save.
 ```
 
-# Celery локальный запуск
+## Celery локальный запуск
 
 Запуск из /WRESTRUS90/fastapi_app:
-```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/..
-```
 
 Celery Worker — рабочий процесс, который выполняет задачи, отправленные в очередь через Redis. Worker "слушает" очередь задач и выполняет их, когда они поступают от Celery Beat
 ``` bash
@@ -223,6 +218,11 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A vk.celery_app.celery_app be
 curl "https://api.vk.com/method/wall.get?access_token=ВАШ_ТОКЕН&v=5.131&owner_id=-209183356&count=5&extended=1"
 ```
 
+Обновление записей
+```bash
+celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
+```
+
 
 ## Вход в панель администрирования
 
@@ -230,15 +230,3 @@ curl "https://api.vk.com/method/wall.get?access_token=ВАШ_ТОКЕН&v=5.131&
 
 Используйте данные суперпользователя из файла `.env` для входа.
 
-```bash
-https://id.vk.com/about/business/go/accounts/230078/apps/53825466/edit
-```
-
-Обновление записей
-```bash
-celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
-```
-
-```
-docker logs celery_worker
-```
