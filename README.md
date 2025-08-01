@@ -229,4 +229,7 @@ celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
 Откройте в браузере: сгенерированный URL + /admin/ (например, https://ваш_субдомен.loca.lt/admin/)
 
 Используйте данные суперпользователя из файла `.env` для входа.
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/develop

@@ -21,10 +21,15 @@ pydantic-settings==2.5.0
 asyncpg==0.29.0
 bcrypt==4.1.2
 passlib[bcrypt]==1.7.4
+<<<<<<< HEAD
+fastadmin==0.2.22
+aiogram[redis]
+=======
 # fastadmin[fastapi,sqlalchemy]
 fastadmin==0.2.22
 #aiogram[redis]
 aiogram==3.13.1
+>>>>>>> origin/develop
 prometheus-fastapi-instrumentator
 tenacity
 aiocache==0.12.2

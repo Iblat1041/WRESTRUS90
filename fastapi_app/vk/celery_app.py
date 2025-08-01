@@ -4,16 +4,12 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 from core.config import settings
-from core.logging_config import setup_logging
 from vk.vk_service import VKService
 from core.db import get_async_session
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-# Настройка логирования
-setup_logging()
-logger = logging.getLogger("my_app.celery")
 
 # Инициализация Celery
 celery_app = Celery(
@@ -37,7 +33,6 @@ celery_app.conf.update(
 
 async def fetch_and_save_news_task_async():
     """Асинхронная задача для получения и сохранения новостей VK."""
-    logger.info("Starting VK news fetch task")
     bot = None
     try:
         bot = Bot(
@@ -52,11 +47,8 @@ async def fetch_and_save_news_task_async():
         # Сохраняем новости в базу данных и отправляем уведомления
         async with get_async_session() as session:
             await vk_service.save_news_to_db(session, news)
-
-        logger.info("VK news fetch task completed successfully")
         return {"status": "success", "count": len(news)}
     except Exception as e:
-        logger.error(f"VK news fetch task failed: {str(e)}", exc_info=True)
         raise
     finally:
         if bot:
@@ -71,7 +63,6 @@ def fetch_and_save_news_task(self):
         result = loop.run_until_complete(fetch_and_save_news_task_async())
         return result
     except Exception as e:
-        logger.error(f"Task failed: {str(e)}", exc_info=True)
         raise self.retry(exc=e, max_retries=3, countdown=5)
     finally:
         if 'loop' in locals() and not loop.is_closed():
@@ -82,6 +73,6 @@ celery_app.conf.beat_schedule = {
     "fetch-vk-news-every-hour": {
         "task": "fetch_and_save_news_task",
         "schedule": crontab(minute=0, hour="*"),
-        "options": {"expires": 60},
+        "options": {"expires": 300},
     },
 }
