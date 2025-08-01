@@ -73,6 +73,6 @@ celery_app.conf.beat_schedule = {
     "fetch-vk-news-every-hour": {
         "task": "fetch_and_save_news_task",
         "schedule": crontab(minute=0, hour="*"),
-        "options": {"expires": 60},
+        "options": {"expires": 300},
     },
 }

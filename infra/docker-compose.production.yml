@@ -105,7 +105,7 @@ services:
       resources:
         limits:
           cpus: '0.05'
-          memory: 50M
+          memory: 100M
 
 volumes:
   postgres_data:
