@@ -18,7 +18,7 @@ services:
       resources:
         limits:
           cpus: '0.4'
-          memory: 400M
+          memory: 600M
 
   redis:
     image: redis:7-alpine
