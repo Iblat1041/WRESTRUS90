@@ -14,11 +14,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-        cpus: '0.4'
-        memory: 400M
 
   redis:
     image: redis:7-alpine
@@ -33,11 +28,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.15'
-          memory: 100M
 
   fastapi:
     image: blathata/wrest_backend:latest
@@ -55,11 +45,6 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.3'
-          memory: 300M
 
   celery:
     image: blathata/wrest_backend:latest
@@ -78,11 +63,6 @@ services:
       fastapi:
         condition: service_started
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.1'
-          memory: 150M
 
   celery_beat:
     image: blathata/wrest_backend:latest
@@ -100,14 +80,10 @@ services:
         condition: service_healthy
       fastapi:
         condition: service_started
+      celery:
+        condition: service_started
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.05'
-          memory: 100M
 
 volumes:
   postgres_data:
   redis_data:
-  pgadmin_data:
