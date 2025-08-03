@@ -14,16 +14,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-<<<<<<< HEAD
-          cpus: '0.4'
-          memory: 600M
-=======
-          cpus: '0.5'
-          memory: 800M
->>>>>>> origin/develop
 
   redis:
     image: redis:7-alpine
@@ -38,16 +28,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-<<<<<<< HEAD
-          cpus: '0.15'
-          memory: 100M
-=======
-          cpus: '0.2'
-          memory: 256M
->>>>>>> origin/develop
 
   fastapi:
     image: blathata/wrest_backend:latest
@@ -65,16 +45,6 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-<<<<<<< HEAD
-          cpus: '0.3'
-          memory: 300M
-=======
-          cpus: '0.2'
-          memory: 256M
->>>>>>> origin/develop
 
   celery:
     image: blathata/wrest_backend:latest
@@ -93,16 +63,6 @@ services:
       fastapi:
         condition: service_started
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-<<<<<<< HEAD
-          cpus: '0.1'
-          memory: 150M
-=======
-          cpus: '0.2'
-          memory: 256M
->>>>>>> origin/develop
 
   celery_beat:
     image: blathata/wrest_backend:latest
@@ -120,19 +80,10 @@ services:
         condition: service_healthy
       fastapi:
         condition: service_started
+      celery:
+        condition: service_started
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-<<<<<<< HEAD
-          cpus: '0.05'
-          memory: 100M
-=======
-          cpus: '0.1'
-          memory: 128M
->>>>>>> origin/develop
 
 volumes:
   postgres_data:
   redis_data:
-  pgadmin_data:
