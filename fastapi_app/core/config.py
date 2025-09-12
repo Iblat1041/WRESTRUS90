@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # Telegram-бот
     telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
+    bot_username: str = Field(alias="BOT_USERNAME")
 
     # Redis
     redis_host: str = Field(alias="REDIS_HOST", default="redis")

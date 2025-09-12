@@ -1,6 +1,16 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+# Определение команд для личных чатов
+private_commands = [
+    BotCommand(command="start", description="Начать взаимодействие с ботом"),
+    BotCommand(command="menu", description="Открыть главное меню"),
+]
+
+# Определение команд для групп и супергрупп
+group_commands = [
+    BotCommand(command="menu", description="Открыть меню бота в группе"),
+]
 
 def get_inline_keyboard(
         *buttons: tuple[str, str],
