@@ -33,11 +33,36 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           cpus: '0.15'
           memory: 100M
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: pgadmin_container
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    env_file:
+      - .env
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 128M
 
 volumes:
   postgres_data:

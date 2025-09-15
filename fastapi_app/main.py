@@ -13,7 +13,6 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
-from fastadmin import fastapi_app as admin_app
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -96,8 +95,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
 
 # Создание экземпляра приложения FastAPI
 app = FastAPI(lifespan=lifespan)
-logger.info("Монтирование админ-панели fastadmin...")
-app.mount("/admin", admin_app)
 
 # Настройка Prometheus метрик
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")

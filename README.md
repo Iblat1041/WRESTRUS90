@@ -25,18 +25,6 @@
 - Интеграция с VK API и Telegram Bot API
 - JWT-аутентификация и ролевой доступ
 
-<h3>FastAdmin-панель:</h3>
-
-CRUD-интерфейс для управления:
- 
-- Пользователями (фильтрация по ролям)
-- Новостями (одобрение/редактирование постов)
-- Записями в секции
-- Мероприятиями
-
-- Кастомные actions (массовые операции, экспорт данных)
-- Логирование действий администраторов
-
 <h3>База данных (PostgreSQL):</h3>
 
 -Оптимизированная схема для:
@@ -65,7 +53,6 @@ CRUD-интерфейс для управления:
 - Python  
 - FastAPI
 - PostgreSQL
-- FastAdmin 
 - Redis
 - gunicorn  
 - docker  
@@ -74,57 +61,46 @@ CRUD-интерфейс для управления:
 - VK API
 - GitHub Actions
 
-<h1 align='center'> ДАЛЕЕ ИНФОРМАЦИЯ ДЛЯ РАЗРАБОТКИ </h1>
+<h2 align='center'> Инструкция по локальному запуску проекта с использованием Polling </h2>
+<h3 align='center'> Запуск Docker-контейнера с базой данных PostgreSQL, redis, pgadmin </h3>
 
-# Запуск PostgreSQL в Docker
-
-1. Перейдите в папку `infra`:
+### 1. Перейдите в папку `infra`:
 ```bash
 cd infra
 ```
-2. Запустите (app, celery_worker, celery_beat) обращаются к redis (для Celery и FSM) и db `docker-compose.production.yml`:
+
+### 2. Запустите Docker-контейнер `docker-compose.local.yml`:
 ```bash
-docker-compose -f docker-compose.production.yml up -d
-```
-Для отладки перезапуск celery_beat celery fastapi:
-```
-docker build -t blathata/wrest_backend .. && docker push blathata/wrest_backend:latest && docker-compose -f docker-compose.production.yml up -d --build --force-recreate celery_beat celery fastapi
+docker-compose -f docker-compose.local.yml -d
 ```
 
-2. Запустите PostgreSQL в Docker, используя файл `docker-compose.yml`:
+### 3. Дождитесь полного запуска контейнера (это может занять несколько секунд).
+
+### 4. Проверьте статус контейнеров:
 ```bash
-docker-compose -f docker-compose.yml up -d
+docker-compose -f docker-compose.local.yml ps
 ```
 
-3. Дождитесь полного запуска контейнеров (это может занять несколько секунд).
-
-4. Проверьте статус контейнеров:
+### 5. При необходимости проверьте лог контейнера:
 ```bash
-docker-compose -f docker-compose.yml pss
+docker-compose -f docker-compose.local.yml logs
 ```
 
-5. Проверьте логи (если необходимо):
+> **<u>Важно</u>**: контейнер с базой данных PostgreSQL должен быть запущен и полностью готов к работе перед запуском проекта.
+
+<h3 align='center'>Запуск проекта:</h3>
+
+### 1. Клонируйте репозиторий:
 ```bash
-docker-compose -f docker-compose.yml logs
+git clone git clone git@github.com:Iblat1041/WRESTRUS90.git
 ```
 
-> **Важно**: PostgreSQL должен быть запущен и полностью готов к работе перед запуском проекта.
-
-## Запуск проекта:
-
-## Клонирование репозитория и настройка окружения
-
-1. Клонируйте репозиторий:
-```bash
-git clone git@github.com:Iblat1041/WRESTRUS90.git
-```
-
-2. Создайте виртуальное окружение:
+### 2. Создайте виртуальное окружение:
 ```bash
 python3 -m venv venv
 ```
 
-3. Активируйте виртуальное окружение:
+### 3. Активируйте виртуальное окружение:
 - Для macOS/Linux:
 ```bash
 source venv/bin/activate
@@ -134,45 +110,52 @@ source venv/bin/activate
 venv\Scripts\activate
 ```
 
-4. Установите зависимости:
+### 4. Установите зависимости:
 ```bash
 pip install -r src/requirements.txt
 ```
 
-5. Создайте файл `.env` в папке `infra` с переменными из `.env.example`:
+### 5. Создайте файл `.env` в папке `infra` с переменными из `.env.example`:
 
 
-## Запуск проекта
-
-1. Перейдите в папку `fastapi_app`:
+### 6. Перейдите в папку `fastapi_app`:
 ```bash
-cd fastapi_app/
+cd fastapi_app
 ```
-
-2. Создайте новые миграции (также при изменении моделей применять):
+### 7. Создайте новые миграции (миграции необходимо создавать при каждом изменении моделей):
 ```bash
 alembic -c db/alembic.ini revision --autogenerate -m "init"
 ```
 
-3. Выполните миграции базы данных:
+### 8. Примените миграции к базе данных:
 ```bash
 alembic -c db/alembic.ini upgrade head
 ```
 
-4. Запустите проект:
+### 9. Запустите проект:
 ```bash
 python main.py
 ```
+После этого введите в Telegram-бот команду `/start` для активации бота.
 
-## Запуск админки.
 
- Запустите админки:
+<h2 align='center'>Celery локальный запуск</h2>
+
+Запуск из /WRESTRUS90/fastapi_app:
+
+Celery Worker — рабочий процесс, который выполняет задачи, отправленные в очередь через Redis. Worker "слушает" очередь задач и выполняет их, когда они поступают от Celery Beat
+
 ```bash
-http://127.0.0.1:8000/admin
+export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=DEBUG
+```
+Эта команда запускает Celery Beat — планировщик задач, который отвечает за запуск периодических задач по расписанию, определённому в конфигурации Celery
+
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
+
 ```
 
-# Подключитесь к базе данных в pgAdmin
-
+<h2 align='center'> Подключение к базе данных в pgAdmin </h2>
 
 ##Подключитесь к базе данных в pgAdmin
 
@@ -201,35 +184,113 @@ Password: wrest.
 Нажмите Save.
 ```
 
-## Celery локальный запуск
 
-Запуск из /WRESTRUS90/fastapi_app:
+<h2 align='center'> Развертыванию проекта с контейнерами FastAPI, PostgreSQL, Redis, Celery на сервере</h2>
 
-Celery Worker — рабочий процесс, который выполняет задачи, отправленные в очередь через Redis. Worker "слушает" очередь задач и выполняет их, когда они поступают от Celery Beat
-``` bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A fastapi_app.vk.celery_app.celery_app worker --loglevel=DEBUG
-```
-Эта команда запускает Celery Beat — планировщик задач, который отвечает за запуск периодических задач по расписанию, определённому в конфигурации Celery
-``` bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)/.. && celery -A vk.celery_app.celery_app beat --loglevel=DEBUG
-```
-Проверка 
-```
-curl "https://api.vk.com/method/wall.get?access_token=ВАШ_ТОКЕН&v=5.131&owner_id=-209183356&count=5&extended=1"
-```
+<h3 align='center'> Предварительные требования</h3
+>
+- Сервер с установленными Docker и Docker Compose
+- SSH-доступ к серверу с использованием SSH-ключа
+- Файлы `.env` (образец файла есть в директории `infra` репозитории проекта на GitHub) и `docker-compose.production.yml` 
+(есть в директории `infra` в репозитории проекта на GitHub)
 
-Обновление записей
+### 1. Подключение к серверу
+
 ```bash
-celery -A fastapi_app.vk.celery_app.celery_app call fetch_and_save_news_task
+ssh user@111.111.111.11
 ```
 
+(здесь и далее по тексту замените *user* на Ваше имя пользователя на сервере, *111.111.111.11* на IP-адрес Вашего сервера)
 
-## Вход в панель администрирования
+### 2. Подготовка окружения
 
-Откройте в браузере: сгенерированный URL + /admin/ (например, https://ваш_субдомен.loca.lt/admin/)
+Перейдите в директорию `infra` на сервере:
 
-Используйте данные суперпользователя из файла `.env` для входа.
-<<<<<<< HEAD
-=======
+```bash
+cd ~/infra
+```
 
->>>>>>> origin/develop
+### 3. Копирование необходимых файлов
+
+Скопируйте файлы `.env` и `docker-compose.production.yml` в папку `infra` на сервере.<br>
+Если файлы находятся на вашем локальном компьютере, используйте команду:
+
+```bash
+scp .env docker-compose.production.yml user@111.111.111.11:~/infra/
+```
+
+### 4. Настройка переменных окружения
+
+Перед запуском убедитесь, что в файле `.env`:
+1. Указан корректный токен для Вашего Telegram бота
+1. Заданы правильные данные для суперпользователя
+1. Установлены корректные параметры для PostgreSQL
+
+### 5. Запуск проекта
+Выполните следующую команду в директории `infra`:<br>
+```bash
+docker compose -f docker-compose.production.yml up -d
+```
+
+Эта команда:
+- Создаст volume для базы данных PostgreSQL
+- Запустит контейнер с базой данных PostgreSQL
+- Запустит контейнер с приложением FastAPI
+- Настроит сеть между контейнерами
+
+### 6. Проверка работы
+Убедитесь, что контейнеры запущены:<br>
+```bash
+docker compose -f docker-compose.production.yml ps
+```
+
+Проверьте логи контейнера с приложением FastAPI:<br>
+```bash
+docker compose -f docker-compose.production.yml logs backend
+```
+
+Проверьте логи контейнера с базой данных PostgreSQL:<br>
+```bash
+docker compose -f docker-compose.production.yml logs db
+```
+
+После этого введите в Telegram-бот команду ```/start``` для активации бота.
+
+### 7. Доступ к приложению
+Приложение FastAPI будет доступно по адресу/порту: https://111.111.111.11:8000<br>
+(также можно настроить Nginx на сервере на переадресацию всех запросов по IP-адресу или доменному имени сервера на 8000 порт).
+
+Панель администрирования будет доступна по адресу: https://111.111.111.11/admin/<br>
+Используйте данные суперпользователя из файла `.env` для входа в панель администрирования.
+
+База данных PostgreSQL будет доступна по следующим параметрам:
+- Хост: db (внутри docker-сети)
+- Порт: 5432
+- Пользователь, пароль и имя базы данных будут установлены в соответствии с файлом .env
+
+### 8. Полезные команды
+Остановить контейнеры:<br>
+```bash
+docker compose -f docker-compose.production.yml down
+```
+
+Перезапустить контейнеры:<br>
+```bash
+docker compose -f docker-compose.production.yml restart
+```
+
+Обновить контейнеры (после обновления образа):
+```
+docker compose -f docker-compose.production.yml pull
+docker compose -f docker-compose.production.yml up -d
+```
+
+### 9. Дополнительная информация
+- При первом запуске будет создан суперпользователь с указанными в файле .env данными
+- Все данные базы данных PostgreSQL при перезапуске контейнера с базой данных сохраняются в volume pgdata
+- Приложение FastAPI автоматически перезапускается при падении контейнера или сервера
+- Для обновления кода на сервере необходимо создать коммит с изменениями и сделать push в ветку main в репозитории 
+GitHub – все изменения автоматически будут применены к Docker-образу в Docker Hub, и изменённый образ будет использован 
+для создания и перезапуска контейнера с приложением FastAPI на сервере (реализовано на базе GitHub Actions workflow). 
+Для корректного обновления необходимо убедиться, что в настройках репозитория GitHub указаны необходимые secrets, см. 
+файл ***main.yml*** в директории ***.github/workflows***.
