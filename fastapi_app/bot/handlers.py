@@ -1,6 +1,7 @@
 from typing import Optional
 from aiogram import Router, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.deep_linking import create_start_link
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -25,6 +26,7 @@ group_router = Router()
 class QuizState(StatesGroup):
     """Класс состояний FSM для управления главным меню."""
     MAIN_MENU = State()
+
 
 # Обработчик команды /start
 @base_router.message(Command(commands=["start", "menu@vasek_100_bot"]))
@@ -79,37 +81,39 @@ async def start(message: types.Message, state: FSMContext) -> None:
             )
         await message.delete()
 
+
 # Обработчик команды /menu в группе
 @group_router.message(Command(commands=["menu", "menu@vasek_100_bot"]))
 async def show_group_menu(message: types.Message) -> None:
     """Обработчик команды /menu для отображения меню в группе."""
     logger.info(f"Received /menu command from user {message.from_user.id} in chat {message.chat.id} (text: {message.text})")
     
-    # Создание inline-клавиатуры с помощью get_inline_keyboard
-    keyboard = get_inline_keyboard(
-        ("Открыть меню бота", "start_menu"),  # Позиционный аргумент для кнопок
-        sizes=(1,),
-        url_buttons=[
-            ("Начать общение с ботом", f"https://t.me/{settings.bot_username}"),
-        ],
-    )
-
-    # Отправляем сообщение и сохраняем его для последующего удаления
+    # Создаем deep link для перехода в личный чат
+    deep_link = f"https://t.me/{settings.bot_username}?start=group_menu_{message.chat.id}"
+    
+    # Создаем клавиатуру с кнопкой-ссылкой
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📲 Перейти в личный чат с ботом", 
+            url=deep_link
+        )]
+    ])
+    # Отправляем сообщение
     response = await message.answer(
-        "Нажмите кнопку, чтобы начать взаимодействие с ботом в личном чате:",
+        "Для работы с меню бота перейдите в личный чат:",
         reply_markup=keyboard,
     )
-    
     # Задержка перед удалением
-    await asyncio.sleep(5)
+    await asyncio.sleep(10)  # Увеличиваем время для пользователя
     
     try:
-        await message.delete()  # Удаляем сообщение пользователя
+        await message.delete()
         logger.debug(f"Successfully deleted user /menu message in chat {message.chat.id}")
-        await response.delete()  # Удаляем сообщение бота (меню)
+        await response.delete()
         logger.debug(f"Successfully deleted bot menu message in chat {message.chat.id}")
     except Exception as e:
         logger.error(f"Failed to delete messages in chat {message.chat.id}: {str(e)}")
+
 
 # Обработчик callback-кнопки
 @base_router.callback_query(lambda c: c.data == "start_menu")
