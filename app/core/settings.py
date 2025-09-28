@@ -1,0 +1,95 @@
+"""Модуль настроек приложения (чтение из переменных окружения / .env)."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Контейнер конфигурации приложения."""
+
+    # --- База данных ---
+    postgres_user: str = Field(alias="POSTGRES_USER")
+    postgres_password: str = Field(alias="POSTGRES_PASSWORD")
+    postgres_db: str = Field(alias="POSTGRES_DB")
+    postgres_server: str = Field(alias="POSTGRES_SERVER", default="localhost")
+    postgres_port_prod: int = Field(alias="POSTGRES_PORT_PROD", default=5432)
+    postgres_port_local: int = Field(alias="POSTGRES_PORT_LOCAL", default=5000)
+
+    # --- Телеграм-бот ---
+    telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
+    bot_username: str = Field(alias="BOT_USERNAME")
+
+    # --- Redis ---
+    redis_host: str = Field(alias="REDIS_HOST", default="redis")
+    redis_port: int = Field(alias="REDIS_PORT", default=6379)
+
+    # --- VK ---
+    vk_access_token: str = Field(alias="VK_ACCESS_TOKEN")
+    vk_group_id: str = Field(alias="VK_GROUP_ID")
+
+    # --- Первый суперпользователь ---
+    first_superuser_first_name: str = Field(alias="FIRST_SUPERUSER_FIRST_NAME")
+    first_superuser_last_name: str = Field(alias="FIRST_SUPERUSER_LAST_NAME")
+    first_superuser_middle_name: str = Field(alias="FIRST_SUPERUSER_MIDDLE_NAME")
+    first_superuser_telegram_id: int = Field(
+        alias="FIRST_SUPERUSER_TELEGRAM_ID",
+        default=0,
+    )
+    first_superuser_role: str = Field(alias="FIRST_SUPERUSER_ROLE", default="ADMIN")
+    first_superuser_email: str = Field(alias="FIRST_SUPERUSER_EMAIL")
+    first_superuser_phone: str = Field(alias="FIRST_SUPERUSER_PHONE")
+    first_superuser_additional_info: str | None = Field(
+        alias="FIRST_SUPERUSER_ADDITIONAL_INFO",
+        default=None,
+    )
+    first_superuser_password: str = Field(alias="FIRST_SUPERUSER_PASSWORD")
+
+    # --- Web ---
+    web_server_host: str = Field(alias="WEB_SERVER_HOST", default="0.0.0.0")
+    web_server_port: int = Field(alias="WEB_SERVER_PORT", default=8443)
+
+    @property
+    def database_url(self) -> str:
+        """
+        Сформировать DSN для asyncpg.
+
+        Возвращает строку подключения к базе с учётом запуска
+        локально или внутри Docker.
+        """
+        host = (
+            "localhost"
+            if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
+            else self.postgres_server
+        )
+        port = (
+            self.postgres_port_local if host == "localhost"
+            else self.postgres_port_prod
+        )
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{host}:{port}/{self.postgres_db}"
+        )
+
+    @property
+    def redis_url(self) -> str:
+        """Сформировать URL для Redis."""
+        host = (
+            "localhost"
+            if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
+            else self.redis_host
+        )
+        return f"redis://{host}:{self.redis_port}/0"
+
+    model_config = SettingsConfigDict(
+        env_file=str(Path(__file__).resolve().parents[2] / "infra" / ".env"),
+        case_sensitive=False,
+        env_file_encoding="utf-8",
+    )
+
+
+settings = Settings()
