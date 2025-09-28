@@ -1,0 +1,2722 @@
+from typing import Optional
+from aiogram import Router, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+import logging
+import asyncio  # Добавляем для использования asyncio.sleep
+
+from core.db import get_async_session
+from bot.keyboards import get_inline_keyboard, get_main_menu_keyboard
+from services.models import User
+from core.config import settings
+
+# Создание логгера
+logger = logging.getLogger(__name__)
+
+# Создание роутеров
+base_router = Router()
+group_router = Router()
+
+# Определение состояний FSM
+class QuizState(StatesGroup):
+    """Класс состояний FSM для управления главным меню."""
+    MAIN_MENU = State()
+
+# Обработчик команды /start
+@base_router.message(Command(commands=["start", "menu@vasek_100_bot"]))
+async def start(message: types.Message, state: FSMContext) -> None:
+    """Обработчик команды /start для личного чата с ботом."""
+    if message.chat.type != "private":  # Проверка, что чат личный
+        response = await message.answer("Команда /start работает только в личном чате. Используйте /menu в группе.")
+        logger.info(f"Ignored /start command from user {message.from_user.id} in chat {message.chat.id} (type: {message.chat.type})")
+        await asyncio.sleep(5)  # Ждём 10 секунд перед удалением
+        try:
+            await response.delete()  # Удаляем сообщение бота
+            await message.delete()  # Удаляем сообщение пользователя
+        except Exception as e:
+            logger.error(f"Failed to delete response message in chat {message.chat.id}: {str(e)}")
+        return
+
+    user_id = message.from_user.id
+    logger.info(f"Received /start command from user {user_id} in private chat")
+    
+    async with get_async_session() as session:
+        try:
+            result = await session.execute(
+                select(User).where(User.telegram_id == user_id).options(selectinload(User.admin_role))
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                user = User(telegram_id=user_id, name=message.from_user.username or "Anonymous")
+                session.add(user)
+                await session.commit()
+                await session.refresh(user, ["admin_role"])
+        except Exception as e:
+            logger.error("Database error in /start: %s", str(e))
+            await message.answer("Произошла ошибка, попробуйте позже.")
+            return
+
+        is_admin = user.admin_role is not None
+        main_menu_kb = get_main_menu_keyboard(is_admin=is_admin)
+
+        # Извлечение аргументов команды
+        args = message.text.split()[1] if len(message.text.split()) > 1 else ""
+        if args == "menu":
+            await state.set_state(QuizState.MAIN_MENU)
+            await message.answer(
+                f"Привет, {user.name}! Добро пожаловать в главное меню бота.",
+                reply_markup=main_menu_kb,
+            )
+        else:
+            await state.set_state(QuizState.MAIN_MENU)
+            await message.answer(
+                f"Привет, {user.name}! Добро пожаловать на страничку Федерации Борьбы г. Мытищи",
+                reply_markup=main_menu_kb,
+            )
+        await message.delete()
+
+# Обработчик команды /menu в группе
+@group_router.message(Command(commands=["menu", "menu@vasek_100_bot"]))
+async def show_group_menu(message: types.Message) -> None:
+    """Обработчик команды /menu для отображения меню в группе."""
+    logger.info(f"Received /menu command from user {message.from_user.id} in chat {message.chat.id} (text: {message.text})")
+    
+    # Создание inline-клавиатуры с помощью get_inline_keyboard
+    keyboard = get_inline_keyboard(
+        ("Открыть меню бота", "start_menu"),  # Позиционный аргумент для кнопок
+        sizes=(1,),
+        url_buttons=[
+            ("Начать общение с ботом", f"https://t.me/{settings.bot_username}"),
+        ],
+    )
+
+    # Отправляем сообщение и сохраняем его для последующего удаления
+    response = await message.answer(
+        "Нажмите кнопку, чтобы начать взаимодействие с ботом в личном чате:",
+        reply_markup=keyboard,
+    )
+    
+    # Задержка перед удалением
+    await asyncio.sleep(5)
+    
+    try:
+        await message.delete()  # Удаляем сообщение пользователя
+        logger.debug(f"Successfully deleted user /menu message in chat {message.chat.id}")
+        await response.delete()  # Удаляем сообщение бота (меню)
+        logger.debug(f"Successfully deleted bot menu message in chat {message.chat.id}")
+    except Exception as e:
+        logger.error(f"Failed to delete messages in chat {message.chat.id}: {str(e)}")
+
+# Обработчик callback-кнопки
+@base_router.callback_query(lambda c: c.data == "start_menu")
+async def handle_start_menu_callback(callback: types.CallbackQuery) -> None:
+    """Обработчик нажатия на кнопку 'Открыть меню бота'."""
+    logger.info(f"Received callback 'start_menu' from user {callback.from_user.id}")
+    user_id = callback.from_user.id
+    async with get_async_session() as session:
+        try:
+            result = await session.execute(
+                select(User).where(User.telegram_id == user_id).options(selectinload(User.admin_role))
+            )
+            user = result.scalar_one_or_none()
+            if not user:
+                user = User(telegram_id=user_id, name=callback.from_user.username or "Anonymous")
+                session.add(user)
+                await session.commit()
+                await session.refresh(user, ["admin_role"])
+        except Exception as e:
+            logger.error("Database error in callback handler: %s", str(e))
+            await callback.message.bot.send_message(
+                chat_id=user_id,
+                text="Произошла ошибка, попробуйте позже."
+            )
+            await callback.answer()
+            return
+
+        is_admin = user.admin_role is not None
+        main_menu_kb = get_main_menu_keyboard(is_admin=is_admin)
+
+        # Отправка сообщения в личный чат
+        try:
+            await callback.message.bot.send_message(
+                chat_id=user_id,
+                text=f"Привет, {user.name}! Добро пожаловать в главное меню бота!",
+                reply_markup=main_menu_kb,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send message to user {user_id}: {str(e)}")
+            await callback.message.answer("Пожалуйста, начните чат с ботом, чтобы открыть меню.")
+            await callback.answer()
+            return
+
+        await callback.message.delete()  # Удаление сообщения с кнопкой в группе
+        await callback.answer()  # Подтверждение обработки callback from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+# Определение команд для личных чатов
+private_commands = [
+    BotCommand(command="start", description="Начать взаимодействие с ботом"),
+    BotCommand(command="menu", description="Открыть главное меню"),
+]
+
+# Определение команд для групп и супергрупп
+group_commands = [
+    BotCommand(command="menu", description="Открыть меню бота в группе"),
+]
+
+def get_inline_keyboard(
+        *buttons: tuple[str, str],
+        sizes: tuple[int, ...] = (2,),
+        placeholder: str = None,
+        url_buttons: tuple[tuple[str, str]] = None,
+) -> InlineKeyboardMarkup:
+    """Универсальная функция для создания inline-клавиатуры.
+
+    В функцию передаются:
+        buttons: Кортеж пар (текст кнопки, callback_data).
+        sizes: Кортеж размеров рядов кнопок
+        (например, (2, 1) для 2 кнопки в первом ряду, 1 во втором).
+        placeholder: Текст для поля ввода (опционально).
+        url_buttons: Кортеж пар (текст кнопки, URL)
+        для кнопок с внешними ссылками.
+    """
+    keyboard = InlineKeyboardBuilder()
+
+    for text, callback_data in buttons:
+        keyboard.add(InlineKeyboardButton(text=text,
+                                          callback_data=callback_data))
+
+    if url_buttons:
+        for text, url in url_buttons:
+            keyboard.add(InlineKeyboardButton(text=text,
+                                              url=url))
+
+    return keyboard.adjust(*sizes).as_markup(
+        resize_keyboard=True,
+        input_field_placeholder=placeholder,
+    )
+
+
+def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
+    """Создает главную клавиатуру с учетом статуса администратора.
+
+    Args:
+        is_admin (bool): Флаг, указывающий, является ли пользователь администратором.
+
+    Returns:
+        InlineKeyboardMarkup: Сформированная клавиатура.
+    """
+    keyboard = InlineKeyboardBuilder()
+
+    # Базовые кнопки для всех пользователей
+    buttons = [
+        ('Соревнования', 'competition'),
+        ('Мероприятия', 'event'),
+        ('Записать ребенка в секцию', 'child_reg'),
+        ('Организация соревнований', 'org_of_comps'),
+    ]
+
+    # Добавляем кнопку "Администратор", если пользователь админ
+    if is_admin:
+        buttons.append(('Администратор', 'admin'))
+
+    # Добавляем кнопки в клавиатуру
+    for text, callback_data in buttons:
+        keyboard.add(InlineKeyboardButton(text=text, callback_data=callback_data))
+
+    # Добавляем кнопки с URL для всех пользователей
+    url_buttons = [
+        ('Посетить сайт федерации', 'https://wrestrus90.ru'),
+        ('Посетить страничку VKontakte', 'https://vk.com/fsbmytishchi'),
+    ]
+    for text, url in url_buttons:
+        keyboard.add(InlineKeyboardButton(text=text, url=url))
+
+    # Настраиваем размеры рядов
+    sizes = (2, 1, 1, 1) if not is_admin else (2, 1, 1, 1, 1)
+
+    return keyboard.adjust(*sizes).as_markup(
+        resize_keyboard=True,
+    ) import logging
+
+logger = logging.getLogger('my_app')
+
+import logging
+from aiogram import BaseMiddleware
+from aiogram.types import TelegramObject, CallbackQuery
+from typing import Callable, Dict, Any, Awaitable
+
+from sqlalchemy import select
+from core.db import async_session_maker
+from sqlalchemy.orm import selectinload
+from services.models import User
+
+logger = logging.getLogger(__name__)
+
+class DatabaseMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        async with async_session_maker() as session:
+            logger.debug("Session created in DatabaseMiddleware: %s", type(session))
+            data["session"] = session
+            try:
+                # Вызываем следующий обработчик
+                result = await handler(event, data)
+                await session.commit()
+                logger.debug("Transaction committed successfully")
+                return result
+            except Exception as e:
+                await session.rollback()
+                logger.error("Database error: %s", str(e), exc_info=True)
+                raise
+            finally:
+                await session.close()
+                logger.debug("Session closed")
+
+
+class RoleMiddleware(BaseMiddleware):
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        session = data.get("session")
+        if not session:
+            logger.error("Session is missing in RoleMiddleware")
+            raise ValueError("Сессия не предоставлена")
+
+        # Проверка наличия from_user
+        if not hasattr(event, "from_user") or not event.from_user:
+            logger.debug("No user associated with event, skipping RoleMiddleware")
+            data["is_admin"] = False
+            return await handler(event, data)
+
+        user_id = event.from_user.id
+        result = await session.execute(
+            select(User).where(User.telegram_id == user_id).options(selectinload(User.admin_role))
+        )
+        user = result.scalars().first()
+        is_admin = user and user.admin_role is not None
+        data["is_admin"] = is_admin
+        data["user"] = user  # Сохраняем user для использования в обработчиках
+
+        if not is_admin and isinstance(event, CallbackQuery) and "admin" in event.data:
+            await event.answer("У вас нет прав администратора.", show_alert=True)
+            return
+
+        return await handler(event, data)
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
+
+class Settings(BaseSettings):
+    """Настройки приложения для интеграции Django, FastAPI и Telegram-бота."""
+
+    # База данных
+    postgres_user: str = Field(alias="POSTGRES_USER")
+    postgres_password: str = Field(alias="POSTGRES_PASSWORD")
+    postgres_db: str = Field(alias="POSTGRES_DB")
+    postgres_server: str = Field(alias="POSTGRES_SERVER", default="localhost")
+    postgres_port_prod: int = Field(alias="POSTGRES_PORT_PROD", default=5432)
+    postgres_port_local: int = Field(alias="POSTGRES_PORT_LOCAL", default=5000)
+
+    # Telegram-бот
+    telegram_bot_token: str = Field(alias="TELEGRAM_BOT_TOKEN")
+    bot_username: str = Field(alias="BOT_USERNAME")
+
+    # Redis
+    redis_host: str = Field(alias="REDIS_HOST", default="redis")
+    redis_port: int = Field(alias="REDIS_PORT", default=6379)
+
+    # VK API
+    # answer_telegram_id: str = Field(alias="ANSWER_TELEGRAM_ID")
+    vk_access_token: str = Field(alias="VK_ACCESS_TOKEN")
+    vk_group_id: str = Field(alias="VK_GROUP_ID")
+
+    # Данные первого суперпользователя
+    first_superuser_first_name: str = Field(alias="FIRST_SUPERUSER_FIRST_NAME")
+    first_superuser_last_name: str = Field(alias="FIRST_SUPERUSER_LAST_NAME")
+    first_superuser_middle_name: str = Field(alias="FIRST_SUPERUSER_MIDDLE_NAME")
+    first_superuser_telegram_id: int = Field(alias="FIRST_SUPERUSER_TELEGRAM_ID", default=0)
+    first_superuser_role: str = Field(alias="FIRST_SUPERUSER_ROLE", default="ADMIN")
+    first_superuser_email: str = Field(alias="FIRST_SUPERUSER_EMAIL")
+    first_superuser_phone: str = Field(alias="FIRST_SUPERUSER_PHONE")
+    first_superuser_additional_info: str = Field(alias="FIRST_SUPERUSER_ADDITIONAL_INFO", default=None)
+    first_superuser_password: str = Field(alias="FIRST_SUPERUSER_PASSWORD")
+
+    # Web-сервер
+    web_server_host: str = Field(alias="WEB_SERVER_HOST", default="0.0.0.0")
+    web_server_port: int = Field(alias="WEB_SERVER_PORT", default=8443)
+
+    @property
+    def database_url(self) -> str:
+        """Создание строки подключения к базе:
+        false - локальная разработка
+        True - запуск в контейнере
+        """
+        host = (
+        "localhost"
+        if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
+        else self.postgres_server
+        )
+        port = self.postgres_port_local if host == "localhost" else self.postgres_port_prod
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@"
+            f"{host}:{port}/{self.postgres_db}"
+        )
+
+    @property
+    def redis_url(self) -> str:
+        """Создание строки подключения к Redis."""
+        host = (
+        "localhost"
+        if os.environ.get("RUNNING_IN_DOCKER", "false") == "false"
+        else self.redis_host
+        )
+        return f"redis://{host}:{self.redis_port}/0"
+
+    model_config = SettingsConfigDict(
+        env_file="../infra/.env",  # Путь относительно текущей директории
+        case_sensitive=False,
+        env_file_encoding="utf-8",
+    )
+
+settings = Settings()
+from sqlalchemy import Column, Integer
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base, declared_attr
+from contextlib import asynccontextmanager
+
+from core.config import settings
+
+class PreBase:
+    """Базовый класс для всех моделей с автоматическим именем таблицы и полем ID."""
+    
+    @declared_attr
+    def __tablename__(cls):
+        return cls.__name__.lower()
+
+    id = Column(Integer, primary_key=True)
+
+# Создаём базовый класс для моделей
+Base = declarative_base(cls=PreBase)
+
+# Настройка асинхронного движка
+engine = create_async_engine(
+    settings.database_url,
+    echo=True,  # Для отладки, можно отключить в продакшене
+    pool_size=5,  # Ограничение пула соединений
+    max_overflow=10,
+)
+
+# Фабрика асинхронных сессий
+async_session_maker = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+@asynccontextmanager
+async def get_async_session():
+    """Контекстный менеджер для работы с асинхронной сессией."""
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise e
+        finally:
+            await session.close()
+
+# Для обратной совместимости
+AsyncSessionLocal = async_session_maker from __future__ import annotations
+
+from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+
+from core.logging_config import setup_logging, LOGGING_CONFIG
+from core.config import settings
+from core.db import Base, engine, async_session_maker
+from services.models import Admin, User
+import logging
+
+# Настройка логирования
+setup_logging()
+logger = logging.getLogger("my_app.init_db")
+
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,
+)
+
+async def create_first_superuser() -> None:
+    """Создаёт первого суперпользователя, если он ещё не существует."""
+    logger.info("Starting creation of first superuser")
+    async with async_session_maker() as session:
+        try:
+            result = await session.execute(
+                select(User).where(
+                    User.telegram_id == settings.first_superuser_telegram_id
+                )
+            )
+            if result.scalar_one_or_none():
+                logger.info(
+                    f"User with Telegram ID {settings.first_superuser_telegram_id} already exists"
+                )
+                return
+
+            # Создаём и сохраняем пользователя
+            user = User(
+                email=settings.first_superuser_email,
+                name=f"{settings.first_superuser_first_name} {settings.first_superuser_last_name}",
+                phone=settings.first_superuser_phone,
+                telegram_id=settings.first_superuser_telegram_id,
+            )
+            session.add(user)
+            await session.flush()  # Сохраняем user и получаем id
+            logger.info(f"Created user: {user.name} ID: {user.id}")
+
+            # Создаём и сохраняем администратора
+            admin = Admin(
+                user_id=user.id,
+                password=pwd_context.hash(settings.first_superuser_password),
+            )
+            session.add(admin)
+            await session.commit()  # Коммитим все изменения
+            logger.info(f"Created first superuser: {user.name} Email: {user.email}")
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to create superuser: {str(e)}", exc_info=True)
+            await session.rollback()
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during superuser creation: {str(e)}", exc_info=True)
+            await session.rollback()
+            raise
+
+async def init_db() -> None:
+    """Инициализирует базу данных, создавая все таблицы."""
+    logger.info("Initializing database...")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database initialized successfully")
+    except SQLAlchemyError as e:
+        logger.error(f"Failed to initialize database: {str(e)}", exc_info=True)
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during database initialization: {str(e)}", exc_info=True)
+        raise
+import logging
+import logging.handlers
+import os
+import sys
+
+from fastapi import logger
+
+class SuppressSelectorFilter(logging.Filter):
+    def filter(self, record):
+        if "Using selector: EpollSelector" in record.getMessage():
+            logger.debug(f"Suppressed EpollSelector log from logger: {record.name}")
+            return False
+        return True
+
+LOGGING_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "suppress_selector": {
+            "()": SuppressSelectorFilter,
+        },
+    },
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+            "stream": "ext://sys.stdout",
+            "level": "DEBUG",
+            "filters": ["suppress_selector"],
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "standard",
+            "filename": os.path.join(os.path.dirname(__file__), "../../app.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "level": "INFO",
+            "encoding": "utf-8",
+            "filters": ["suppress_selector"],
+        },
+    },
+    "loggers": {
+        "": {
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "my_app": {
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "my_app.celery": {
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "my_app.vk_service": {
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "asyncio": {
+            "level": "ERROR",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "celery": {
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "aiogram": {
+            "level": "DEBUG",  # Увеличим до DEBUG для отладки
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "aiohttp": {
+            "level": "DEBUG",
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+        "sqlalchemy": {
+            "level": "DEBUG",  # Добавим для отладки SQL-запросов
+            "handlers": ["console", "file"],
+            "propagate": False,
+            "filters": ["suppress_selector"],
+        },
+    },
+}
+
+def setup_logging() -> None:
+    log_dir = os.path.dirname(LOGGING_CONFIG["handlers"]["file"]["filename"])
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        logging.config.dictConfig(LOGGING_CONFIG)
+        logger = logging.getLogger("my_app")
+        logger.debug("Logging setup completed successfully")
+    except Exception as e:
+        print(f"Failed to setup logging: {e}", file=sys.stderr)
+        raise
+from typing import List
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+class CRUDBase:
+    """Базовый класс для всех моделей для работы с базой данных."""
+
+    def __init__(self, model: type) -> None:
+        """Конструктор базового класса для работы с базой данных.
+
+        :param model: модель.
+        """
+        self.model = model
+
+    async def get(
+            self,
+            obj_id: int,
+            session: AsyncSession,
+    ) -> None:
+        """Получить объект по id.
+
+        :param obj_id: id объекта
+        :param session: сессия базы данных
+        :return: объект.
+        """
+        db_obj = await session.execute(
+            select(self.model).where(
+                self.model.id == obj_id,
+            ),
+        )
+        return db_obj.scalars().first()
+
+    async def get_all(self, session: AsyncSession) -> List[dict]:
+        """Получить все объекты."""
+        db_objs = await session.execute(select(self.model))
+        return db_objs.scalars().all()
+
+    @staticmethod
+    async def update(
+            obj: type,
+            session: AsyncSession,
+    ) -> None:
+        """Обновить объект."""
+        session.add(obj)
+        await session.commit()
+        await session.refresh(obj)
+        return obj
+
+    @staticmethod
+    async def remove(
+            obj: type,
+            session: AsyncSession,
+    ) -> None:
+        """Удалить объект."""
+        await session.delete(obj)
+        await session.commit()
+        return obj
+
+    async def create(
+            self,
+            obj_in: dict,
+            session: AsyncSession,
+    ) -> type:
+        """Создать новый объект.
+
+        :param obj_in: словарь с данными для создания объекта
+        :param session: сессия базы данных
+        :return: созданный объект
+        """
+        db_obj = self.model(**obj_in)
+        session.add(db_obj)
+        await session.commit()
+        await session.refresh(db_obj)
+        return db_obj 
+from typing import Any, List, Optional, Sequence
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from crud.base import CRUDBase
+from services.models import ChildRegistration
+
+
+class CRUDChildRegistrations(CRUDBase):
+    """Реализация CRUD для регистраций детей."""
+
+    async def get_registration_by_id(
+        self,
+        reg_id: int,
+        session: AsyncSession,
+    ) -> ChildRegistration:
+        """Получение регистрации по ID."""
+        result = await session.execute(
+            select(self.model).where(
+                self.model.id == reg_id,),
+        )
+        return result.scalars().first()
+
+
+    async def get_all_registrations(
+        self,
+        session: AsyncSession,
+        offset: int = 0,
+        limit: int = 5,
+    ) -> ChildRegistration:
+        """Получение всех регистраций с пагинацией."""
+        result = await session.execute(
+            select(self.model)
+            .offset(offset)
+            .limit(limit)
+            .order_by(self.model.created_at.desc()),
+        )
+        return result.scalars().all()
+
+
+    async def get_registrations_count(
+        self,
+        session: AsyncSession,
+    ) -> int:
+        """Получение общего количества регистраций."""
+        result = await session.execute(
+            select(func.count()).select_from(self.model),
+        )
+        return result.scalar()
+
+
+    async def update_registration_status(
+        self,
+        reg_id: int,
+        status: str,
+        session: AsyncSession,
+    ) -> bool:
+        """Обновление статуса регистрации."""
+        registration = await self.get_registration_by_id(session, reg_id)
+        if registration:
+            registration.status = status
+            await session.commit()
+            await session.refresh(registration)
+            return True
+        return False
+
+
+    async def create_registration(
+        self,
+        session: AsyncSession,
+        **kwargs: dict[str, Any],
+    ) -> ChildRegistration:
+        """Создание новой регистрации."""
+        registration = self.model(**kwargs)
+        session.add(registration)
+        await session.commit()
+        await session.refresh(registration)
+        return registration
+
+
+    async def update_registration(
+        self,
+        reg_id: int,
+        session: AsyncSession,
+        **kwargs: dict[str, Any],
+    ) -> Optional[ChildRegistration]:
+        """Обновление объекта регистрации."""
+        registration = await self.get_registration_by_id(session, reg_id)
+        if registration:
+            for key, value in kwargs.items():
+                setattr(registration, key, value)
+            await session.commit()
+            await session.refresh(registration)
+        return registration
+
+
+child_reg_crud = CRUDChildRegistrations(ChildRegistration) from aiocache import cached, Cache
+from aiocache.serializers import PickleSerializer
+from enum import Enum
+from typing import List, Optional
+from sqlalchemy import select, func, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.models import Event
+from .base import CRUDBase
+import logging
+
+logger = logging.getLogger(__name__)
+
+class EventCategory(Enum):
+    COMPETITION = "competition"
+    EVENT = "event"
+    SPONSOR = "sponsor"
+
+
+class CRUDEvents(CRUDBase):
+    @cached(ttl=300, serializer=PickleSerializer(), namespace="events")
+    async def get_all_events(
+        self,
+        session: AsyncSession,
+        offset: int = 0,
+        limit: int = 10,
+        category: str | None = None,
+        status: str | None = None
+    ) -> List[Event]:
+        """Получить все мероприятия с пагинацией и опциональной фильтрацией."""
+        query = select(self.model).offset(offset).limit(limit).order_by(self.model.published_at.desc())
+        if category:
+            query = query.where(self.model.category == category)
+        if status:
+            query = query.where(self.model.status == status)
+        db_objs = await session.execute(query)
+        return db_objs.scalars().all()
+
+
+    @cached(ttl=300, serializer=PickleSerializer(), namespace="events")
+    async def get_events_count(
+        self,
+        session: AsyncSession,
+        category: str | None = None,
+        status: str | None = None
+    ) -> int:
+        """Получить общее количество мероприятий с опциональной фильтрацией."""
+        query = select(func.count()).select_from(self.model)
+        if category:
+            query = query.where(self.model.category == category)
+        if status:
+            query = query.where(self.model.status == status)
+        result = await session.execute(query)
+        return result.scalar_one()
+
+
+    async def get_total_active_competitions(self, session: AsyncSession) -> int:
+        """Возвращает общее количество активных соревнований."""
+        return await self.get_events_count(
+            session=session,
+            category=EventCategory.COMPETITION.value,
+            status="active"
+        )
+
+
+    async def get_event_by_id(
+        self,
+        session: AsyncSession,
+        event_id: int,
+        status: str | None = None
+    ) -> Optional[Event]:
+        """Получить мероприятие по ID с опциональной фильтрацией по статусу."""
+        query = select(self.model).where(self.model.id == event_id)
+        if status:
+            query = query.where(self.model.status == status)
+        db_obj = await session.execute(query)
+        return db_obj.scalars().first()
+
+
+    async def update_event_status(self, session: AsyncSession, event_id: int, status: str) -> bool:
+        """Обновить статус мероприятия."""
+        result = await session.execute(
+            update(self.model).where(self.model.id == event_id).values(status=status)
+        )
+        if result.rowcount == 0:
+            logger.warning(f"Event with id={event_id} not found for status update")
+            return False
+        await session.commit()
+        logger.info(f"Successfully updated status for event_id={event_id} to {status}")
+        await Cache(Cache.MEMORY).delete(f"get_all_events:{status}:active")
+        await Cache(Cache.MEMORY).delete(f"get_events_count:{status}:active")
+        return True
+
+
+    async def update_event_category(self, session: AsyncSession, event_id: int, category: str, commit: bool = True) -> bool:
+        """Обновить категорию мероприятия."""
+        try:
+            if category not in [c.value for c in EventCategory]:
+                logger.error(f"Invalid category provided: {category}")
+                raise ValueError(f"Недопустимая категория: {category}. Допустимые значения: {[c.value for c in EventCategory]}")
+            
+            logger.debug(f"Updating category for event_id={event_id} to category={category}")
+            result = await session.execute(
+                update(self.model).where(self.model.id == event_id).values(category=category)
+            )
+            if result.rowcount == 0:
+                logger.warning(f"Event with id={event_id} not found for category update")
+                return False
+            
+            if commit:
+                await session.commit()
+                logger.info(f"Successfully updated category for event_id={event_id} to {category}")
+                await Cache(Cache.MEMORY).delete(f"get_all_events:{category}:active")
+                await Cache(Cache.MEMORY).delete(f"get_events_count:{category}:active")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error updating category for event_id={event_id}: {e}", exc_info=True)
+            raise
+
+
+    async def delete_event(self, session: AsyncSession, event_id: int) -> bool:
+        """Удалить мероприятие."""
+        db_obj = await self.get_event_by_id(session, event_id)
+        if not db_obj:
+            logger.warning(f"Event with id={event_id} not found for deletion")
+            return False
+        await session.delete(db_obj)
+        await session.commit()
+        logger.info(f"Successfully deleted event_id={event_id}")
+        await Cache(Cache.MEMORY).delete(f"get_all_events:{db_obj.category}:active")
+        await Cache(Cache.MEMORY).delete(f"get_events_count:{db_obj.category}:active")
+        return True
+
+events_crud = CRUDEvents(Event) from typing import Any, Optional, Sequence
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from crud.base import CRUDBase
+from services.models import User
+
+
+class CRUDUsers(CRUDBase):
+    """Реализация CRUD для юзеров."""
+
+    async def get_user_by_telegram_id(
+        self,
+        telegram_id: int,
+        session: AsyncSession,
+    ) -> Optional[User]:
+        """Получение юзера по telegram id."""
+        result = await session.execute(
+            select(self.model)
+            .where(self.model.telegram_id == telegram_id)
+            .options(selectinload(self.model.admin_role))  # Загружаем admin_role
+        )
+        return result.scalars().first()
+
+    async def get_user_by_id(
+        self,
+        user_id: int,
+        session: AsyncSession,
+    ) -> Optional[User]:
+        """Получение юзера по id."""
+        result = await session.execute(
+            select(self.model).where(
+                self.model.id == user_id,
+            ),
+        )
+        return result.scalars().first()
+
+    async def get_all_users(
+        self,
+        session: AsyncSession,
+        offset: int = 0,
+        limit: int = 5,
+    ) -> Sequence[User]:
+        """Получение юзеров с ограничением выборки."""
+        result = await session.execute(
+            select(self.model).offset(offset).limit(limit),
+        )
+        return result.scalars().all()
+
+    async def get_users_count(
+        self,
+        session: AsyncSession,
+    ) -> int:
+        """Получение количества юзеров."""
+        result = await session.execute(
+            select(
+                func.count(),
+            ).select_from(self.model),
+        )
+        return result.scalar()
+
+    async def create_user(
+        self,
+        session: AsyncSession,
+        **kwargs: dict[str, Any],
+    ) -> User:
+        """Создание юзера, тестовая версия."""
+        user = self.model(**kwargs)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+    async def update_user(
+            self,
+            user_id: int,
+            session: AsyncSession,
+            **kwargs: dict[str, Any],
+    ) -> Optional[User]:
+        """Обновление объекта юзера."""
+        user = await session.get(self.model, user_id)
+        if user:
+            for key, value in kwargs.items():
+                setattr(user, key, value)
+            await session.commit()
+            await session.refresh(user)
+        return user
+
+
+users_crud = CRUDUsers(User) # A generic, single database configuration.
+
+[alembic]
+# path to migration scripts.
+prepend_sys_path = .
+# Use forward slashes (/) also on windows to provide an os agnostic path
+script_location = db/migrations
+
+# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
+# Uncomment the line below if you want the files to be prepended with date and time
+# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
+
+# sys.path path, will be prepended to sys.path if present.
+# defaults to the current working directory.
+
+# timezone to use when rendering the date within the migration file
+# as well as the filename.
+# If specified, requires the python>=3.9 or backports.zoneinfo library and tzdata library.
+# Any required deps can installed by adding `alembic[tz]` to the pip requirements
+# string value is passed to ZoneInfo()
+# leave blank for localtime
+# timezone =
+
+# max length of characters to apply to the "slug" field
+# truncate_slug_length = 40
+
+# set to 'true' to run the environment during
+# the 'revision' command, regardless of autogenerate
+# revision_environment = false
+
+# set to 'true' to allow .pyc and .pyo files without
+# a source .py file to be detected as revisions in the
+# versions/ directory
+# sourceless = false
+
+# version location specification; This defaults
+# to migrations/versions.  When using multiple version
+# directories, initial revisions must be specified with --version-path.
+# The path separator used here should be the separator specified by "version_path_separator" below.
+# version_locations = %(here)s/bar:%(here)s/bat:migrations/versions
+
+# version path separator; As mentioned above, this is the character used to split
+# version_locations. The default within new alembic.ini files is "os", which uses os.pathsep.
+# If this key is omitted entirely, it falls back to the legacy behavior of splitting on spaces and/or commas.
+# Valid values for version_path_separator are:
+#
+# version_path_separator = :
+# version_path_separator = ;
+# version_path_separator = space
+# version_path_separator = newline
+#
+# Use os.pathsep. Default configuration used for new projects.
+version_path_separator = os
+
+# set to 'true' to search source files recursively
+# in each "version_locations" directory
+# new in Alembic version 1.10
+# recursive_version_locations = false
+
+# the output encoding used when revision files
+# are written from script.py.mako
+# output_encoding = utf-8
+
+sqlalchemy.url = driver://user:pass@localhost/dbname
+
+
+[post_write_hooks]
+# post_write_hooks defines scripts or Python functions that are run
+# on newly generated revision scripts.  See the documentation for further
+# detail and examples
+
+# format using "black" - use the console_scripts runner, against the "black" entrypoint
+# hooks = black
+# black.type = console_scripts
+# black.entrypoint = black
+# black.options = -l 79 REVISION_SCRIPT_FILENAME
+
+# lint with attempts to fix using "ruff" - use the exec runner, execute a binary
+# hooks = ruff
+# ruff.type = exec
+# ruff.executable = %(here)s/.venv/bin/ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Logging configuration
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARNING
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARNING
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S 
+
+from __future__ import annotations
+
+from typing import Optional
+
+from aiogram import F, Router, types
+from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from bot.logger import logger
+from bot.keyboards import get_main_menu_keyboard, get_inline_keyboard
+from core.db import get_async_session
+from crud.events import events_crud
+from crud.users import users_crud
+from crud.child_registrations import child_reg_crud
+# from crud.child_registrations import (
+#     get_all_registrations,
+#     get_registrations_count,
+#     get_registration_by_id,
+#     update_registration_status,
+# )
+from services.models import User
+from .keyboards import (
+    get_child_actions_keyboard,
+    get_child_registrations_list_keyboard,
+    get_users_list_keyboard,
+    get_events_list_keyboard,
+    get_event_actions_keyboard,
+)
+
+admin_router = Router()
+
+
+class StartState(StatesGroup):
+    """Стартовый стэйт для состояний администратора."""
+    START_ADMIN = State()
+    USERS = State()
+    CHILD_REGISTRATIONS = State()
+    SELECT_CHILD = State()
+    SELECT_EVENT = State()
+
+
+ADMIN_USERS_MENU = get_inline_keyboard(
+    ("Список пользователей", "users_list"),
+    ("Список детей", "child_registrations_list"),
+    ("Список мероприятий", "event_list_admin"),
+    ("Вернуться в главное меню", "back_to_main"),
+    sizes=(1, 1, 1, 1),
+)
+
+
+@admin_router.callback_query(F.data == "admin")
+async def handle_admin_menu(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Обрабатывает нажатие кнопки 'Администратор'."""
+    await state.set_state(StartState.START_ADMIN)
+    await callback.message.edit_text(
+        "Меню администратора",
+        reply_markup=ADMIN_USERS_MENU,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data == "back_to_main")
+async def handle_back_to_main(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,  # Добавляем сессию как зависимость
+) -> None:
+    """Возвращает пользователя в главное меню."""
+    # Ленивый импорт QuizState
+    from bot.handlers import QuizState
+    user_id = callback.from_user.id
+    async with session:  # Используем переданную сессию
+        result = await session.execute(
+            select(User)
+            .where(User.telegram_id == user_id)
+            .options(selectinload(User.admin_role))  # Предварительная загрузка admin_role
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            user = User(telegram_id=user_id, name=callback.from_user.username or "Anonymous")
+            session.add(user)
+            await session.commit()
+    
+    is_admin = user.admin_role is not None if user else False
+    main_menu_kb = get_main_menu_keyboard(is_admin=is_admin)
+
+    await state.set_state(QuizState.MAIN_MENU)
+    await callback.message.edit_text(
+        f"Привет {user.name} добро пожаловать на страничку Федерации Борьбы г. Мытищи",
+        reply_markup=main_menu_kb,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data == "users_list")
+async def show_users_list(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Обрабатывает отображение списка пользователей."""
+    data = await state.get_data()
+    page = data.get("current_page", 0)
+    per_page = 5
+
+    async with get_async_session() as session:
+        users = await users_crud.get_all_users(session, offset=page * per_page, limit=per_page)
+        total_users = await users_crud.get_users_count(session)
+
+    keyboard = get_users_list_keyboard(users, page, total_users, per_page)
+
+    await state.update_data(current_menu="users_list", current_page=page)
+    await callback.message.edit_text(
+        ("Выберите необходимого пользователя для изменения его профиля.\n\n"
+         f"Список пользователей (страница {page + 1}):"),
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data == "child_registrations_list")
+async def show_child_registrations_list(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Обрабатывает отображение списка зарегистрированных детей."""
+    data = await state.get_data()
+    page = data.get("current_page", 0)
+    per_page = 5
+
+    async with get_async_session() as session:
+        registrations = await child_reg_crud.get_all_registrations(
+            session,
+            offset=page * per_page,
+            limit=per_page
+        )
+        total_registrations = await child_reg_crud.get_registrations_count(session)
+
+    keyboard = get_child_registrations_list_keyboard(
+        registrations,
+        page,
+        total_registrations,
+        per_page
+    )
+
+    await state.update_data(
+        current_menu="child_registrations_list",
+        current_page=page
+    )
+    await callback.message.edit_text(
+        ("Управление зарегистрированными детьми.\n\n"
+         f"Список детей (страница {page + 1}):"),
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data.startswith("child_select_"))
+async def show_child_actions(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Отображает действия (Утвердить/Отклонить) для выбранного ребенка.
+
+    Args:
+        callback: Объект CallbackQuery от aiogram.
+        state: Контекст конечного автомата состояний.
+        session: Асинхронная сессия SQLAlchemy.
+    """
+    reg_id = int(callback.data.split("_")[2])  # Извлекаем reg_id из child_select_{reg_id}
+
+    async with get_async_session() as session:
+        registration = await child_reg_crud.get_registration_by_id(session, reg_id)
+        if not registration:
+            await callback.answer("Запись не найдена.", show_alert=True)
+            return
+
+    status = "✅" if registration.status == "approved" else "❌" if registration.status == "rejected" else "⏳"
+    text = f"{registration.child_name} {registration.child_surname} (Возраст: {registration.age}) [{status}]"
+    keyboard = get_child_actions_keyboard(reg_id, registration.status)
+
+    await state.set_state(StartState.SELECT_CHILD)
+    await callback.message.edit_text(
+        f"Действия для ребенка:\n\n{text}",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data.startswith("child_reg_"))
+async def handle_child_registration_action(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Обрабатывает действия над записью ребенка (утвердить/отклонить).
+
+    Args:
+        callback: Объект CallbackQuery от aiogram.
+        state: Контекст конечного автомата состояний.
+        session: Асинхронная сессия SQLAlchemy.
+    """
+    parts = callback.data.split("_")
+    if len(parts) < 3:  # Минимальный формат: ["child", "reg", "action", "reg_id"]
+        await callback.answer("Неверный формат действия.", show_alert=True)
+        return
+
+    action = parts[2]  # Третий элемент — действие (approve/reject)
+    reg_id = int(parts[3])  # Четвертый элемент — ID регистрации
+
+    async with get_async_session() as session:
+            registration = await child_reg_crud.get_registration_by_id(session, reg_id)
+            if not registration:
+                await callback.answer("Запись не найдена.", show_alert=True)
+                return
+
+            if action == "approve":
+                if await child_reg_crud.update_registration_status(session, reg_id, "approved"):  # Добавлен await
+                    await callback.answer("Регистрация утверждена.")
+                else:
+                    await callback.answer("Ошибка при утверждении.", show_alert=True)
+            elif action == "reject":
+                if await child_reg_crud.update_registration_status(session, reg_id, "rejected"):  # Добавлен await
+                    await callback.answer("Регистрация отклонена.")
+                else:
+                    await callback.answer("Ошибка при отклонении.", show_alert=True)
+
+        # Обновляем список после изменения статуса
+    data = await state.get_data()
+    page = data.get("current_page", 0)
+    per_page = 5
+    async with get_async_session() as session:
+        registrations = await child_reg_crud.get_all_registrations(
+            session,
+            offset=page * per_page,
+            limit=per_page
+        )
+        total_registrations = await child_reg_crud.get_registrations_count(session)
+        new_keyboard = get_child_registrations_list_keyboard(
+            registrations,
+            page,
+            total_registrations,
+            per_page
+        )
+        # Добавляем информацию о последней измененной записи в текст
+        last_updated_reg = next((reg for reg in registrations if reg.id == reg_id), None)
+        status_text = f" (Последняя запись: {last_updated_reg.child_name} [{last_updated_reg.status}]" if last_updated_reg else ""
+        new_text = (
+            f"Управление зарегистрированными детьми.\n\n"
+            f"Список детей (страница {page + 1}):{status_text}"
+        )
+
+        current_message = callback.message
+        # Преобразуем клавиатуру в строку для сравнения содержимого
+        current_markup_str = str(current_message.reply_markup) if current_message.reply_markup else ""
+        new_markup_str = str(new_keyboard) if new_keyboard else ""
+        # Проверяем, изменилось ли сообщение
+        if (current_message.text != new_text or current_markup_str != new_markup_str):
+            await current_message.edit_text(
+                new_text,
+                reply_markup=new_keyboard,
+            )
+            logger.info("Message updated with new status.")
+        else:
+            logger.info("Message not modified, skipping edit_text.")
+
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data == "event_list_admin")
+async def show_events_list(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Обрабатывает отображение списка мероприятий."""
+    data = await state.get_data()
+    page = data.get("current_page", 0)
+    per_page = 5
+
+    async with get_async_session() as session:
+        events = await events_crud.get_all_events(
+            session,
+            offset=page * per_page,
+            limit=per_page
+        )
+        total_events = await events_crud.get_events_count(session)
+
+    keyboard = get_events_list_keyboard(
+        events,
+        page,
+        total_events,
+        per_page
+    )
+
+    await state.update_data(
+        current_menu="event_list_admin",
+        current_page=page
+    )
+    await callback.message.edit_text(
+        ("Управление мероприятиями.\n\n"
+         f"Список мероприятий (страница {page + 1}):"),
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data.startswith("event_select_"))
+async def show_event_actions(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Отображает действия (изменить статус/категорию, удалить) для выбранного мероприятия."""
+    event_id = int(callback.data.split("_")[2])
+
+    async with get_async_session() as session:
+        event = await events_crud.get_event_by_id(session, event_id)
+        if not event:
+            await callback.answer("Мероприятие не найдено.", show_alert=True)
+            return
+
+    status = {"active": "✅", "inactive": "❌", "pending": "⏳"}.get(event.status, "⏳")
+    text = f"{event.title} (ID: {event.vk_post_id}) [{status}, {event.category}]"
+    keyboard = get_event_actions_keyboard(event_id, event.status, event.category)
+
+    await state.set_state(StartState.SELECT_EVENT)
+    await callback.message.edit_text(
+        f"Действия для мероприятия:\n\n{text}",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_router.callback_query(F.data.startswith("event_action_"))
+async def handle_event_action(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Обрабатывает действия над мероприятием (изменить статус/категорию, удалить)."""
+    parts = callback.data.split("_")
+    if len(parts) < 4 or (parts[2] != "delete" and len(parts) < 5):
+        await callback.answer("Неверный формат действия.", show_alert=True)
+        return
+
+    action_type = parts[2]
+    event_id = int(parts[4] if action_type != "delete" else parts[3])
+    value = parts[3] if action_type != "delete" else None
+
+    async with get_async_session() as session:
+        event = await events_crud.get_event_by_id(session, event_id)
+        if not event:
+            await callback.answer("Мероприятие не найдено.", show_alert=True)
+            return
+
+        if action_type == "status":
+            if value in ["active", "inactive", "pending"]:
+                if await events_crud.update_event_status(session, event_id, value):
+                    await callback.answer(f"Статус изменён на {value}.")
+                else:
+                    await callback.answer("Ошибка при изменении статуса.", show_alert=True)
+            else:
+                await callback.answer("Недопустимый статус.", show_alert=True)
+        elif action_type == "category":
+            if value in ["competition", "event", "sponsor"]:
+                if await events_crud.update_event_category(session, event_id, value):
+                    await callback.answer(f"Категория изменена на {value}.")
+                else:
+                    await callback.answer("Ошибка при изменении категории.", show_alert=True)
+            else:
+                await callback.answer("Недопустимая категория.", show_alert=True)
+        elif action_type == "delete":
+            if await events_crud.delete_event(session, event_id):
+                await callback.answer("Мероприятие удалено.")
+            else:
+                await callback.answer("Ошибка при удалении.", show_alert=True)
+
+    # Обновляем список после изменения
+    data = await state.get_data()
+    page = data.get("current_page", 0)
+    per_page = 5
+    async with get_async_session() as session:
+        events = await events_crud.get_all_events(
+            session,
+            offset=page * per_page,
+            limit=per_page
+        )
+        total_events = await events_crud.get_events_count(session)
+        new_keyboard = get_events_list_keyboard(
+            events,
+            page,
+            total_events,
+            per_page
+        )
+        last_updated_event = next((evt for evt in events if evt.id == event_id), None)
+        status_text = (f" (Последнее: {last_updated_event.title} [{last_updated_event.status}, {last_updated_event.category}])" 
+                       if last_updated_event else "")
+        new_text = (
+            f"Управление мероприятиями.\n\n"
+            f"Список мероприятий (страница {page + 1}):{status_text}"
+        )
+
+        current_message = callback.message
+        current_markup_str = str(current_message.reply_markup) if current_message.reply_markup else ""
+        new_markup_str = str(new_keyboard) if new_keyboard else ""
+        if current_message.text != new_text or current_markup_str != new_markup_str:
+            await current_message.edit_text(
+                new_text,
+                reply_markup=new_keyboard,
+            )
+            logger.info(f"Event list updated after action: {action_type}={value or 'delete'} on event_id={event_id}")
+        else:
+            logger.info("Event list not modified, skipping edit_text.")
+
+    await callback.answer()
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from services.models import User, Event
+
+
+def get_child_registrations_list_keyboard(
+    registrations,
+    page: int,
+    total: int,
+    per_page: int
+) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для списка зарегистрированных детей с выбором."""
+    builder = InlineKeyboardBuilder()
+    for reg in registrations:
+        status = "✅" if reg.status == "approved" else "❌" if reg.status == "rejected" else "⏳"
+        text = f"{reg.child_name} {reg.child_surname} (Возраст: {reg.age}) [{status}]"
+        builder.row(
+            InlineKeyboardButton(
+                text=text,
+                callback_data=f"child_select_{reg.id}",
+            )
+        )
+    if page > 0:
+        builder.row(InlineKeyboardButton(
+            text="⬅️ Предыдущая",
+            callback_data="child_reg_prev"
+        ))
+    if (page + 1) * per_page < total:
+        builder.row(InlineKeyboardButton(
+            text="➡️ Следующая",
+            callback_data="child_reg_next"
+        ))
+    builder.row(InlineKeyboardButton(
+        text="⬅️ Назад",
+        callback_data="admin"
+    ))
+    return builder.as_markup()
+
+
+def get_child_actions_keyboard(
+    reg_id: int,
+    status: str
+) -> InlineKeyboardMarkup:
+    """Создает клавиатуру с действиями для выбранного ребенка."""
+    builder = InlineKeyboardBuilder()
+    if status == "pending":
+        builder.row(
+            InlineKeyboardButton(
+                text="Утвердить",
+                callback_data=f"child_reg_approve_{reg_id}"
+            ),
+            InlineKeyboardButton(
+                text="Отклонить",
+                callback_data=f"child_reg_reject_{reg_id}"
+            ),
+            width=2
+        )
+    builder.row(
+        InlineKeyboardButton(
+            text="Назад",
+            callback_data="child_registrations_list"
+        )
+    )
+    return builder.as_markup()
+
+
+def get_users_list_keyboard(
+    users: list[User],
+    page: int,
+    total_users: int,
+    per_page: int,
+) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для списка пользователей с пагинацией."""
+    builder = InlineKeyboardBuilder()
+    for user in users:
+        text = f"{user.name} (ID: {user.telegram_id})"
+        builder.add(InlineKeyboardButton(
+            text=text,
+            callback_data=f"user_{user.id}"
+        ))
+    if page > 0:
+        builder.add(InlineKeyboardButton(
+            text="⬅️ Предыдущая",
+            callback_data="users_prev"
+        ))
+    if (page + 1) * per_page < total_users:
+        builder.add(InlineKeyboardButton(
+            text="➡️ Следующая",
+            callback_data="users_next"
+        ))
+    builder.add(InlineKeyboardButton(
+        text="⬅️ Назад",
+        callback_data="admin"
+    ))
+    return builder.adjust(1).as_markup()
+
+
+def get_events_list_keyboard(
+    events: list[Event],
+    page: int,
+    total_events: int,
+    per_page: int
+) -> InlineKeyboardMarkup:
+    """Создает клавиатуру для списка мероприятий с выбором."""
+    builder = InlineKeyboardBuilder()
+    for event in events:
+        status = {"active": "✅", "inactive": "❌", "pending": "⏳"}.get(event.status, "⏳")
+        text = f"{event.title} (ID: {event.vk_post_id}) [{status}, {event.category}]"
+        builder.row(
+            InlineKeyboardButton(
+                text=text,
+                callback_data=f"event_select_{event.id}"
+            )
+        )
+    if page > 0:
+        builder.row(InlineKeyboardButton(
+            text="⬅️ Предыдущая",
+            callback_data="event_prev"
+        ))
+    if (page + 1) * per_page < total_events:
+        builder.row(InlineKeyboardButton(
+            text="➡️ Следующая",
+            callback_data="event_next"
+        ))
+    builder.row(InlineKeyboardButton(
+        text="⬅️ Назад",
+        callback_data="admin"
+    ))
+    return builder.as_markup()
+
+
+def get_event_actions_keyboard(
+    event_id: int,
+    status: str,
+    category: str
+) -> InlineKeyboardMarkup:
+    """Создает клавиатуру с действиями для выбранного мероприятия."""
+    builder = InlineKeyboardBuilder()
+    status_options = ["active", "inactive", "pending"]
+    category_options = ["competition", "event", "sponsor"]
+
+    for stat in status_options:
+        if stat != status:
+            builder.add(InlineKeyboardButton(
+                text=f"Статус: {stat}",
+                callback_data=f"event_action_status_{stat}_{event_id}"
+            ))
+    for cat in category_options:
+        if cat != category:
+            builder.add(InlineKeyboardButton(
+                text=f"Категория: {cat}",
+                callback_data=f"event_action_category_{cat}_{event_id}"
+            ))
+    builder.add(InlineKeyboardButton(
+        text="Удалить",
+        callback_data=f"event_action_delete_{event_id}"
+    ))
+    builder.row(InlineKeyboardButton(
+        text="Назад",
+        callback_data="event_list_admin"
+    ))
+    return builder.adjust(2).as_markup() from __future__ import annotations
+
+from typing import Optional
+
+from aiogram import F, Router, types
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardRemove
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.db import get_async_session
+from bot.keyboards import get_main_menu_keyboard
+from services.models import ChildRegistration, User
+
+child_router = Router()
+
+
+class ChildRegState(StatesGroup):
+    """Состояния для регистрации ребенка."""
+    CHILD_NAME = State()
+    CHILD_SURNAME = State()
+    AGE = State()
+    PARENT_CONTACT = State()
+
+
+@child_router.callback_query(F.data == "child_reg")
+async def start_child_registration(
+    callback: types.CallbackQuery,  # Исправлен тип с message на callback
+    state: FSMContext,
+) -> None:
+    """Начать процесс регистрации ребенка."""
+    await state.set_state(ChildRegState.CHILD_NAME)
+    await callback.message.answer("Введите имя ребенка:")
+
+
+@child_router.message(ChildRegState.CHILD_NAME)
+async def process_child_name(
+    message: types.Message,
+    state: FSMContext,
+) -> None:
+    """Обработать имя ребенка и запросить фамилию."""
+    await state.update_data(child_name=message.text)
+    await state.set_state(ChildRegState.CHILD_SURNAME)
+    await message.answer("Введите фамилию ребенка:")
+
+
+@child_router.message(ChildRegState.CHILD_SURNAME)
+async def process_child_surname(
+    message: types.Message,
+    state: FSMContext,
+) -> None:
+    """Обработать фамилию ребенка и запросить возраст."""
+    await state.update_data(child_surname=message.text)
+    await state.set_state(ChildRegState.AGE)
+    await message.answer("Введите возраст ребенка:")
+
+
+@child_router.message(ChildRegState.AGE)
+async def process_age(
+    message: types.Message,
+    state: FSMContext,
+) -> None:
+    """Обработать возраст и запросить контакт родителя."""
+    try:
+        age = int(message.text)
+        if not 0 < age < 150:  # Проверка разумного диапазона возраста
+            raise ValueError("Возраст должен быть от 1 до 149 лет")
+        await state.update_data(age=age)
+        await state.set_state(ChildRegState.PARENT_CONTACT)
+        await message.answer("Введите контакт родителя (например, телефон):")
+    except ValueError as e:
+        await message.answer(f"Ошибка: {e}. Пожалуйста, введите корректный возраст.")
+
+
+@child_router.message(ChildRegState.PARENT_CONTACT)
+async def process_parent_contact(
+    message: types.Message,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    """Завершить регистрацию ребенка и вернуть в главное меню."""
+    data = await state.get_data()
+    user_id = message.from_user.id
+
+    # Проверка или создание пользователя
+    result = await session.execute(select(User).where(User.telegram_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(
+            telegram_id=user_id,
+            name=message.from_user.username or "Anonymous",
+            created_at=func.now(),
+        )
+        session.add(user)
+        await session.flush()  # Получаем ID пользователя
+
+    is_admin = user.admin_role is not None
+    main_menu_kb = get_main_menu_keyboard(is_admin=is_admin)
+
+    # Сохранение регистрации ребенка
+    child_reg = ChildRegistration(
+        user_id=user.id,
+        child_name=data["child_name"],
+        child_surname=data["child_surname"],
+        age=data["age"],
+        parent_contact=message.text,
+        status="pending",
+        created_at=func.now(),
+    )
+    session.add(child_reg)
+    try:
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        await message.answer(f"Ошибка при сохранении: {e}")
+        return
+
+    await state.clear()
+    await message.answer(
+        "Регистрация ребенка успешно завершена!",
+        reply_markup=main_menu_kb,
+    )
+import logging
+from typing import Any, Dict
+from aiogram import Router, F, types
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InputMediaPhoto
+from sqlalchemy.ext.asyncio import AsyncSession
+from enum import Enum
+
+from core.db import get_async_session
+from services.event_handl.keyboards import build_event_list_keyboard
+from bot.keyboards import get_main_menu_keyboard
+from services.models import Event, User
+from crud.events import events_crud
+from crud.users import CRUDUsers
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+event_router = Router()
+
+# Инициализация CRUD-объектов
+users_crud = CRUDUsers(User)
+
+class EventCategory(Enum):
+    COMPETITION = "competition"
+    EVENT = "event"
+    SPONSOR = "sponsor"
+
+class EventState(StatesGroup):
+    """Состояния FSM для работы с событиями"""
+    START_EVENT = State()      # Состояние просмотра списка событий
+    DETAILS_EVENT = State()    # Состояние просмотра деталей события
+    current_page = State()     # Текущая страница пагинации
+    total_pages = State()      # Всего страниц
+    message_id = State()       # ID последнего сообщения
+    selected_event_id = State()# ID просматриваемого события
+    category = State()         # Категория событий
+
+# region Основные обработчики
+
+
+@event_router.callback_query(F.data == 'competition')
+async def handle_competitions(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик кнопки 'Соревнования'"""
+    await state.set_state(EventState.START_EVENT)
+    await state.update_data(category=EventCategory.COMPETITION.value)
+    await show_event_list(callback, state, page=1, category=EventCategory.COMPETITION.value)
+
+
+@event_router.callback_query(F.data == 'event')
+async def handle_events(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик кнопки 'Мероприятия'"""
+    await state.set_state(EventState.START_EVENT)
+    await state.update_data(category=EventCategory.EVENT.value)
+    await show_event_list(callback, state, page=1, category=EventCategory.EVENT.value)
+
+
+@event_router.callback_query(F.data == 'sponsor')
+async def handle_sponsors(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик кнопки 'Спонсоры'"""
+    await state.set_state(EventState.START_EVENT)
+    await state.update_data(category=EventCategory.SPONSOR.value)
+    await show_event_list(callback, state, page=1, category=EventCategory.SPONSOR.value)
+
+
+@event_router.callback_query(F.data.startswith('page_'))
+async def handle_pagination(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик пагинации"""
+    try:
+        page = int(callback.data.split('_')[1])
+        state_data = await state.get_data()
+        category = state_data.get('category', EventCategory.COMPETITION.value)
+        await show_event_list(callback, state, page, category=category)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка пагинации: {e}")
+        await callback.answer("Ошибка обработки страницы.", show_alert=True)
+
+
+@event_router.callback_query(F.data.startswith('/details_'))
+async def handle_details(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик просмотра деталей события"""
+    try:
+        event_id = int(callback.data.split('_')[1])
+        await state.set_state(EventState.DETAILS_EVENT)
+        await show_event_details(callback, state, event_id)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка загрузки деталей: {e}")
+        await callback.answer("Ошибка обработки события.", show_alert=True)
+
+
+@event_router.callback_query(F.data.startswith('back_to_list_'))
+async def handle_back_to_list(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Обработчик возврата к списку событий"""
+    try:
+        page = int(callback.data.split('_')[-1])
+        state_data = await state.get_data()
+        category = state_data.get('category', EventCategory.COMPETITION.value)
+        await state.set_state(EventState.START_EVENT)
+        await show_event_list(callback, state, page, category=category)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка возврата: {e}")
+        await callback.answer("Ошибка возврата к списку.", show_alert=True)
+
+
+@event_router.callback_query(F.data == 'back_to_menu')
+async def handle_back_to_menu(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    **kwargs: Any
+) -> None:
+    """Обработчик возврата в главное меню"""
+    try:
+        data = kwargs.get('data', {})
+        if not data.get('user'):
+            user = await users_crud.get_user_by_telegram_id(
+                session=session,
+                telegram_id=callback.from_user.id
+            )
+            if user:
+                data['user'] = user
+                data['is_admin'] = hasattr(user, 'admin_role') and user.admin_role is not None
+
+        await return_to_main_menu(callback, state, data)
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Ошибка возврата в меню: {e}", exc_info=True)
+        await callback.message.answer("Произошла ошибка. Попробуйте позже.")
+        await callback.answer()
+
+# endregion
+
+# region Вспомогательные функции
+
+async def show_event_list(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    page: int,
+    category: str,
+    events_per_page: int = 5
+):
+    """Отображает список событий с пагинацией для указанной категории"""
+    async with get_async_session() as session:
+        try:
+            if category not in [c.value for c in EventCategory]:
+                logger.error(f"Invalid category provided: {category}")
+                await callback.answer("Недопустимая категория.", show_alert=True)
+                return
+
+            # Получаем общее количество событий для категории
+            total_events = await events_crud.get_events_count(
+                session=session,
+                category=category,
+                status="active"
+            )
+            if not total_events:
+                await callback.answer(f"Нет активных {category}.", show_alert=True)
+                return
+
+            # Вычисляем параметры пагинации
+            total_pages = calculate_total_pages(total_events, events_per_page)
+            page = normalize_page_number(page, total_pages)
+            
+            # Получаем события для страницы
+            current_events = await events_crud.get_all_events(
+                session=session,
+                offset=(page - 1) * events_per_page,
+                limit=events_per_page,
+                category=category,
+                status="active"
+            )
+
+            # Формируем и отправляем сообщение
+            await send_event_list_message(
+                callback, state, current_events, page, total_pages, category
+            )
+
+        except Exception as e:
+            logger.error(f"Ошибка показа списка для категории {category}: {e}", exc_info=True)
+            await callback.answer("Ошибка загрузки данных.", show_alert=True)
+
+
+async def show_event_details(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    event_id: int
+):
+    """Отображает детали события"""
+    async with get_async_session() as session:
+        try:
+            event = await events_crud.get_event_by_id(session, event_id)
+            if not event:
+                await callback.answer("Событие не найдено.", show_alert=True)
+                return
+
+            # Отправляем контент события
+            await send_event_content(callback, event)
+
+            # Сохраняем состояние и отправляем клавиатуру
+            await save_event_view_state(state, event_id)
+            await send_back_button(callback, state)
+
+        except Exception as e:
+            logger.error(f"Ошибка показа деталей: {e}", exc_info=True)
+            await callback.answer("Ошибка загрузки данных.", show_alert=True)
+
+
+async def return_to_main_menu(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    data: Dict[str, Any]
+) -> None:
+    """Возвращает пользователя в главное меню"""
+    try:
+        await state.clear()
+        
+        user = data.get("user")
+        is_admin = data.get("is_admin", False)
+
+        if not user:
+            logger.warning(f"Пользователь с Telegram ID {callback.from_user.id} не найден")
+            await callback.message.answer(
+                "Добро пожаловать! Пожалуйста, зарегистрируйтесь для доступа к функциям бота."
+            )
+            return
+
+        logger.debug(f"Возврат в меню для пользователя {user.id}, is_admin={is_admin}")
+        
+        await callback.message.answer(
+            f"Привет, {user.name if user else 'пользователь'}! Добро пожаловать!",
+            reply_markup=get_main_menu_keyboard(is_admin=is_admin)
+        )
+        
+        try:
+            await callback.message.delete()
+        except Exception as delete_error:
+            logger.warning(f"Не удалось удалить сообщение: {delete_error}")
+            
+    except Exception as e:
+        logger.error(f"Ошибка возврата в меню: {e}", exc_info=True)
+        raise
+
+# endregion
+
+# region Вспомогательные функции
+
+def calculate_total_pages(total_items: int, per_page: int) -> int:
+    """Вычисляет общее количество страниц"""
+    return max(1, (total_items + per_page - 1) // per_page)
+
+
+def normalize_page_number(page: int, total_pages: int) -> int:
+    """Нормализует номер страницы"""
+    return max(1, min(page, total_pages))
+
+
+async def send_event_list_message(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    events: list[Event],
+    page: int,
+    total_pages: int,
+    category: str
+) -> None:
+    """Формирует и отправляет сообщение со списком событий."""
+    category_titles = {
+        EventCategory.COMPETITION.value: "🏆 Активные соревнования",
+        EventCategory.EVENT.value: "📅 Активные мероприятия",
+        EventCategory.SPONSOR.value: "🤝 Спонсоры"
+    }
+    max_title_length = 30
+
+    # Формируем текст сообщения
+    message_text = (
+        f"{category_titles.get(category, 'События')} (Страница {page}/{total_pages}):\n\n" +
+        "\n".join(
+            f"Пост № <b>{event.id}</b>. <b>{event.title[:max_title_length].capitalize()}"
+            f"{'...' if len(event.title) > max_title_length else ''}</b> - "
+            f"{event.published_at.strftime('%Y-%m-%d')}"
+            for event in events
+        )
+    )
+
+    # Создаем клавиатуру
+    keyboard = build_event_list_keyboard(events, page, total_pages)
+
+    # Отправляем сообщение
+    try:
+        if page == 1:
+            await callback.message.delete()
+    except Exception as e:
+        logger.warning(f"Не удалось удалить сообщение: {e}")
+
+    msg = await callback.message.answer(
+        message_text,
+        reply_markup=keyboard,
+        parse_mode='HTML'
+    )
+
+    # Сохраняем состояние
+    await state.update_data(
+        current_page=page,
+        total_pages=total_pages,
+        message_id=msg.message_id,
+        category=category
+    )
+
+
+async def send_event_content(callback: types.CallbackQuery, event: Event):
+    """Отправляет контент события (текст + медиа)"""
+    message_text = (
+        f"<b>{event.title}</b>\n"
+        f"{event.content}\n\n"
+        f"Дата: {event.published_at.strftime('%Y-%m-%d')}"
+    )
+
+    if event.images and isinstance(event.images, list) and event.images:
+        try:
+            await callback.message.answer_photo(
+                photo=event.images[0],
+                caption=message_text,
+                parse_mode='HTML'
+            )
+            return
+        except Exception as e:
+            logger.error(f"Ошибка отправки фото: {e}")
+
+    await callback.message.answer(message_text, parse_mode='HTML')
+
+
+async def send_back_button(callback: types.CallbackQuery, state: FSMContext):
+    """Отправляет кнопку возврата к списку"""
+    state_data = await state.get_data()
+    current_page = state_data.get('current_page', 1)
+    
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[[
+        types.InlineKeyboardButton(
+            text="🔙 Вернуться к списку",
+            callback_data=f"back_to_list_{current_page}"
+        )
+    ]])
+    
+    await callback.message.answer(
+        "Вернуться к событиям",
+        reply_markup=keyboard
+    )
+
+async def save_event_view_state(state: FSMContext, event_id: int):
+    """Сохраняет состояние просмотра события"""
+    await state.update_data(
+        selected_event_id=event_id,
+        viewing_mode='details'
+    )
+
+# endregion  import logging
+from typing import List
+from aiogram import types
+
+from services.models import Event
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
+
+def build_event_list_keyboard(
+    events: List[Event],
+    current_page: int,
+    total_pages: int
+) -> types.InlineKeyboardMarkup:
+    """Строит инлайн-клавиатуру для списка событий.
+
+    Args:
+        events: Список объектов событий.
+        current_page: Текущая страница пагинации (начинается с 1).
+        total_pages: Общее количество страниц.
+
+    Returns:
+        InlineKeyboardMarkup: Клавиатура с кнопками для событий, навигации и возврата в меню.
+
+    Raises:
+        ValueError: Если current_page или total_pages имеют некорректные значения.
+    """
+    if current_page < 1:
+        logger.error(f"Некорректное значение current_page: {current_page}")
+        raise ValueError("current_page должен быть >= 1")
+    if total_pages < 0:
+        logger.error(f"Некорректное значение total_pages: {total_pages}")
+        raise ValueError("total_pages должен быть >= 0")
+
+    keyboard_rows = []
+
+    # Логируем создание клавиатуры
+    logger.debug(f"Создание клавиатуры для {len(events)} событий, страница {current_page}/{total_pages}")
+
+    # Кнопки "Подробнее" для событий (по 2 в ряд)
+    if events:
+        for i in range(0, len(events), 2):
+            row = [
+                types.InlineKeyboardButton(
+                    text=f"Смотреть пост № {event.id}",
+                    callback_data=f"/details_{event.id}"
+                )
+                for event in events[i:i+2]
+            ]
+            keyboard_rows.append(row)
+    else:
+        logger.warning("Список событий пуст, создается клавиатура только с кнопкой 'В меню'")
+
+    # Кнопки навигации
+    nav_buttons = []
+    if current_page > 1:
+        nav_buttons.append(types.InlineKeyboardButton(
+            text="⬅️ Назад",
+            callback_data=f"page_{current_page-1}"
+        ))
+    if current_page < total_pages:
+        nav_buttons.append(types.InlineKeyboardButton(
+            text="Вперед ➡️",
+            callback_data=f"page_{current_page+1}"
+        ))
+    
+    if nav_buttons:
+        keyboard_rows.append(nav_buttons)
+
+    # Кнопка возврата в меню
+    keyboard_rows.append([
+        types.InlineKeyboardButton(
+            text="🔙 В меню",
+            callback_data="back_to_menu"
+        )
+    ])
+
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard_rows) from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import BigInteger, Column, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import JSON, String, Text
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+
+from core.db import Base
+
+if TYPE_CHECKING:
+    from .models import Admin, ChildRegistration, User
+
+
+class Admin(Base):
+    """Модель для администраторов системы."""
+
+    __tablename__ = "admins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    password = Column(String, nullable=False)  # Хранит хешированный пароль
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="admin_role")
+
+
+class ChildRegistration(Base):
+    """Модель для регистрации детей в секции."""
+
+    __tablename__ = "child_registrations"
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    child_name = Column(String, nullable=False)
+    child_surname = Column(String, nullable=False)  # Новое поле для фамилии
+    age = Column(Integer, nullable=False)
+    parent_contact = Column(String, nullable=False)
+    status = Column(
+        Enum("pending", "approved", "rejected", name="registration_status"),
+        default="pending",
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="registrations")
+
+
+class Event(Base):
+    """Модель для событий (соревнования, новости, спонсоры)."""
+
+    __tablename__ = "events"
+
+    vk_post_id = Column(String, unique=True, index=True)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    images = Column(JSON, nullable=True)
+    status = Column(
+        Enum("active", "inactive", "pending", name="news_status"),
+        default="active",
+    )
+    category = Column(
+        Enum("competition", "event", "sponsor", name="news_category"),
+        default="competition",
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class User(Base):
+    """Модель для пользователей системы."""
+
+    __tablename__ = "users"
+
+    telegram_id = Column(BigInteger, unique=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True)
+    phone = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    registrations = relationship("ChildRegistration", back_populates="user")
+    admin_role = relationship("Admin", back_populates="user", uselist=False)    # /app/vk/celery_app.py
+import asyncio
+import logging
+from celery import Celery
+from celery.schedules import crontab
+from core.config import settings
+from vk.vk_service import VKService
+from core.db import get_async_session
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+
+logger = logging.getLogger("my_app.celery")
+
+# Инициализация Celery
+celery_app = Celery(
+    "vk_news",
+    broker=settings.redis_url,
+    backend=settings.redis_url,
+    include=["vk.celery_app"],
+)
+
+# Конфигурация Celery
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    broker_connection_retry_on_startup=True,
+    task_track_started=True,
+    task_create_missing_queues=True,
+    task_concurrency=1,  # Ограничение на одну задачу за раз
+    worker_pool="solo",  # Используем solo пул для избежания конкуренции
+)
+
+# Настройка движка базы данных
+engine = create_async_engine(
+    settings.database_url,
+    echo=True,
+    pool_size=5,  # Максимум 5 соединений
+    max_overflow=10,  # Дополнительные соединения при необходимости
+    pool_timeout=30,  # Таймаут ожидания соединения
+)
+async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+async def fetch_and_save_news_task_async():
+    """Асинхронная задача для получения и сохранения новостей VK."""
+    logger.info("Starting fetch_and_save_news_task_async")
+    bot = None
+    try:
+        bot = Bot(
+            token=settings.telegram_bot_token,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        vk_service = VKService(bot=bot)
+        news = await vk_service.fetch_news(count=10)
+        async with async_session() as session:
+            await vk_service.save_news_to_db(session, news)
+        logger.info("Successfully completed fetch_and_save_news_task_async")
+        return {"status": "success", "count": len(news)}
+    except Exception as e:
+        logger.error(f"Error in fetch_and_save_news_task_async: {str(e)}", exc_info=True)
+        raise
+    finally:
+        if bot:
+            await bot.session.close()
+
+@celery_app.task(name="fetch_and_save_news_task", bind=True, max_retries=3)
+def fetch_and_save_news_task(self):
+    """Синхронная обёртка для вызова асинхронной задачи."""
+    try:
+        return asyncio.run(fetch_and_save_news_task_async())
+    except Exception as e:
+        logger.error(f"Task failed: {str(e)}", exc_info=True)
+        raise self.retry(exc=e, countdown=5)
+    finally:
+        # Закрываем пул соединений
+        asyncio.run(engine.dispose())
+
+# Настройка Celery Beat
+celery_app.conf.beat_schedule = {
+    "fetch-vk-news-every-hour": {
+        "task": "fetch_and_save_news_task",
+        "schedule": crontab(minute=0, hour="*"),
+        "options": {"expires": 300},
+    },
+}  import aiohttp
+import time
+from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+from services.models import Event
+from core.config import settings
+from sqlalchemy import select
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from aiogram import Bot
+from prometheus_client import Counter, Histogram
+import logging
+
+logger = logging.getLogger("my_app.vk_service")
+
+# Prometheus метрики
+vk_requests_total = Counter(
+    "vk_api_requests_total",
+    "Total VK API requests",
+    ["status"]
+)
+vk_request_duration = Histogram(
+    "vk_api_request_duration_seconds",
+    "VK API request duration"
+)
+
+class VKService:
+    def __init__(self, bot: Bot = None):
+        self.base_url = "https://api.vk.com/method"
+        self.access_token = settings.vk_access_token
+        self.group_id = settings.vk_group_id
+        self.bot = bot
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        retry=retry_if_exception_type(aiohttp.ClientError),
+        before_sleep=lambda retry_state: logger.warning(
+            f"Retrying VK API request (attempt {retry_state.attempt_number})..."
+        ),
+    )
+    async def fetch_news(self, count: int = 10) -> list[dict]:
+        """Получение новостей из группы VK с повторными попытками."""
+        logger.info(f"Fetching {count} news from VK group {self.group_id}")
+        start_time = time.time()
+        try:
+            async with aiohttp.ClientSession() as session:
+                params = {
+                    "access_token": self.access_token,
+                    "v": "5.131",
+                    "owner_id": f"-{self.group_id}",
+                    "count": count,
+                    "extended": 1,
+                }
+                logger.debug(f"VK API params: {params}")
+                async with session.get(f"{self.base_url}/wall.get", params=params) as response:
+                    data = await response.json()
+                    logger.debug(f"VK API response: {data}")
+                    vk_request_duration.observe(time.time() - start_time)
+                    if response.status == 200:
+                        if "error" in data:
+                            error_msg = data["error"]["error_msg"]
+                            error_code = data["error"]["error_code"]
+                            logger.error(f"VK API error {error_code}: {error_msg}")
+                            vk_requests_total.labels(status="error").inc()
+                            raise Exception(f"VK API error: {error_msg}")
+                        vk_requests_total.labels(status="success").inc()
+                        items = data.get("response", {}).get("items", [])
+                        logger.info(f"Received {len(items)} news items from VK")
+                        return items
+                    else:
+                        logger.error(f"VK API request failed with status {response.status}")
+                        vk_requests_total.labels(status="error").inc()
+                        raise Exception(f"VK API error: {response.status}")
+        except Exception as e:
+            vk_request_duration.observe(time.time() - start_time)
+            logger.error(f"Fetch news failed: {str(e)}")
+            raise
+
+    async def save_news_to_db(self, session: AsyncSession, news: list[dict]):
+        """Сохранение новостей в таблицу Events и отправка уведомлений."""
+        logger.info(f"Saving {len(news)} news items to database")
+        # Собираем все vk_post_id для проверки одним запросом
+        vk_ids = [str(item["id"]) for item in news]
+        async with session.begin():  # Явное начало транзакции
+            # Проверяем существующие события одним запросом
+            result = await session.execute(
+                select(Event.vk_post_id).where(Event.vk_post_id.in_(vk_ids))
+            )
+            existing_ids = set(result.scalars().all())
+            
+            new_events = []
+            for item in news:
+                vk_id = str(item["id"])
+                if vk_id not in existing_ids:
+                    images = []
+                    if "attachments" in item:
+                        for attachment in item.get("attachments", []):
+                            if attachment["type"] == "photo":
+                                sizes = attachment["photo"]["sizes"]
+                                largest = max(sizes, key=lambda x: x["width"] * x["height"])
+                                images.append(largest["url"])
+
+                    event = Event(
+                        vk_post_id=vk_id,
+                        title=item.get("text", "")[:100] or "Без заголовка",
+                        content=item.get("text", "") or "Без текста",
+                        images=images,
+                        status="active",
+                        category="event",
+                        created_at=datetime.utcnow(),
+                        published_at=datetime.fromtimestamp(item["date"]) if item["date"] else None,
+                    )
+                    new_events.append(event)
+                    logger.debug(f"Added new event with vk_post_id {vk_id}")
+
+            if new_events:
+                session.add_all(new_events)
+                try:
+                    await session.commit()
+                    logger.info(f"Successfully saved {len(new_events)} new events to database")
+                except Exception as e:
+                    logger.error(f"Failed to save events to database: {str(e)}", exc_info=True)
+                    await session.rollback()
+                    raise
+            else:
+                logger.info("No new events to save")
+
+            # Отправка уведомлений администраторам
+            if self.bot and new_events:
+                telegram_id = getattr(settings, "answer_telegram_id", None) or settings.first_superuser_telegram_id
+                if not telegram_id:
+                    logger.warning("No Telegram ID provided, skipping notifications")
+                    return
+
+                for event in new_events:
+                    try:
+                        await self.bot.send_message(
+                            chat_id=telegram_id,
+                            text=f"Новое событие: {event.title}\nID: {event.vk_post_id}",
+                        )
+                        logger.info(f"Sent Telegram notification for event {event.vk_post_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to send Telegram notification for event {event.vk_post_id}: {str(e)}")
+ from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator
+
+import logging
+import logging.config
+
+from core.logging_config import LOGGING_CONFIG, setup_logging
+
+from bot.middleware import DatabaseMiddleware, RoleMiddleware
+import uvicorn
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.redis import RedisStorage
+from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommandScopeAllGroupChats
+from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
+
+from bot.handlers import base_router, group_router
+from bot.keyboards import private_commands, group_commands
+from core.config import settings
+from core.init_db import create_first_superuser, init_db
+from services import AdminAdmin, ChildRegistrationAdmin, EventAdmin, UserAdmin
+from services import admin_router, child_router, event_router
+
+# Настройка логирования
+setup_logging()
+logger = logging.getLogger("my_app")
+
+# Инициализация бота
+bot = Bot(
+    token=settings.telegram_bot_token,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
+storage = RedisStorage.from_url(settings.redis_url)
+dp = Dispatcher(storage=storage)
+
+# Регистрация маршрутов
+dp.include_routers(
+    admin_router,
+    base_router,
+    child_router,
+    event_router,
+    group_router,
+)
+
+# Применение middleware
+dp.message.middleware(DatabaseMiddleware())
+dp.message.middleware(RoleMiddleware())
+dp.callback_query.middleware(DatabaseMiddleware())
+dp.callback_query.middleware(RoleMiddleware())
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
+    """
+    Контекстный менеджер для жизненного цикла приложения.
+
+    Выполняет инициализацию базы данных, создание суперпользователя,
+    настройку команд бота, запуск поллинга Telegram и очистку ресурсов при завершении.
+    """
+    logger.info("Инициализация базы данных...")
+    await init_db()
+    logger.info("Создание суперпользователя...")
+    await create_first_superuser()
+    logger.info("Удаление вебхука Telegram...")
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    # Настройка команд бота
+    logger.info("Настройка команд бота...")
+    try:
+        # # Удаление старых команд для личных чатов
+        # await bot.delete_my_commands(scope=BotCommandScopeAllPrivateChats())
+        # Установка новых команд для личных чатов
+        await bot.set_my_commands(commands=private_commands, scope=BotCommandScopeAllPrivateChats())
+        logger.debug("Successfully set commands for private chats")
+        
+        # # Удаление старых команд для групп
+        # await bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
+        # Установка новых команд для групп
+        await bot.set_my_commands(commands=group_commands, scope=BotCommandScopeAllGroupChats())
+        logger.debug("Successfully set commands for group chats")
+    except Exception as e:
+        logger.error(f"Failed to set bot commands: {str(e)}")
+    
+    logger.info("Запуск поллинга Telegram...")
+    import asyncio
+    polling_task = asyncio.create_task(dp.start_polling(bot))
+
+    yield  # Передача управления приложению
+
+    logger.info("Остановка приложения...")
+    await dp.stop_polling()
+    await polling_task
+    await bot.session.close()
+
+# Создание экземпляра приложения FastAPI
+app = FastAPI(lifespan=lifespan)
+
+# Настройка Prometheus метрик
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
+if __name__ == "__main__":
+    """Точка входа для запуска приложения с uvicorn."""
+    logger.info(
+        f"Запуск uvicorn на {settings.web_server_host}:{settings.web_server_port}"
+    )
+    uvicorn.run(
+        app,
+        host=settings.web_server_host,
+        port=settings.web_server_port,
+        log_config=LOGGING_CONFIG,
+        log_level="info",
+    )
