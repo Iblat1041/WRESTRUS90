@@ -1,27 +1,48 @@
-gunicorn==23.0.0
-fastapi==0.115.0
-uvicorn==0.30.6
-python-jose==3.3.0
-pydantic==2.9.2
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.35
-alembic==1.13.3
-aiogram==3.13.1
-aiohttp==3.10.5
-vk-api==11.9.9
-celery==5.4.0
-redis==5.0.8
-python-dotenv==1.0.1
-pytest==8.3.3
-pytest-asyncio==0.24.0
-pytest-cov==5.0.0
-httpx==0.27.2
-docker==7.1.0
-pydantic-settings==2.5.0
-asyncpg==0.29.0
-bcrypt==4.1.2
-passlib[bcrypt]==1.7.4
-fastadmin==0.2.22
-prometheus-fastapi-instrumentator
-tenacity
-aiocache==0.12.2
+# Основной фреймворк и сервер
+fastapi==0.115.0              # Асинхронный веб-фреймворк
+uvicorn==0.30.6               # ASGI-сервер для разработки
+gunicorn==23.0.0              # WSGI-сервер для продакшена с uvicorn workers
+
+# Валидация и настройки
+pydantic[email]==2.9.2        # Pydantic с поддержкой EmailStr (включает email-validator)
+pydantic-settings==2.5.0      # Для управления настройками через .env
+
+# База данных
+sqlalchemy==2.0.35            # ORM для работы с БД
+asyncpg==0.29.0               # Асинхронный драйвер PostgreSQL
+psycopg2-binary==2.9.9        # Синхронный драйвер PostgreSQL (для Alembic или Celery)
+alembic==1.13.3               # Миграции БД
+
+# Аутентификация и безопасность
+python-jose==3.3.0            # JWT-токены
+bcrypt==4.1.2                 # Хэширование паролей
+passlib[bcrypt]==1.7.4        # Хэширование паролей (для совместимости)
+
+# Telegram-бот
+aiogram==3.13.1               # Фреймворк для Telegram-ботов
+aiohttp==3.10.5               # Асинхронный HTTP-клиент (для aiogram и других)
+
+# Интеграция с VK
+vk-api==11.9.9                # API для VK
+
+# Очереди задач и кэширование
+celery==5.4.0                 # Очереди задач
+redis==5.0.8                  # Redis для Celery и aiocache
+aiocache==0.12.2              # Кэширование для событий
+
+# Тестирование
+pytest==8.3.3                 # Фреймворк для тестирования
+pytest-asyncio==0.24.0        # Поддержка асинхронных тестов
+pytest-cov==5.0.0             # Покрытие тестами
+httpx==0.27.2                 # Асинхронный HTTP-клиент для тестов
+
+# DevOps и мониторинг
+docker==7.1.0                 # Для работы с Docker
+prometheus-fastapi-instrumentator==6.1.0  # Метрики для FastAPI
+tenacity==9.0.0               # Повторные попытки для устойчивости
+
+# Работа с .env
+python-dotenv==1.0.1          # Загрузка переменных окружения
+
+# Админ-панель
+fastadmin==0.2.22             # Админ-панель для FastAPI

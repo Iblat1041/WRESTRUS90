@@ -1,0 +1,74 @@
+.
+├── api
+│   └── v1
+│       ├── deps.py
+│       ├── __pycache__
+│       └── router.py
+├── constants
+│   ├── admin.py
+│   └── __init__.py
+├── core
+│   ├── __init__.py
+│   ├── logging_config.py
+│   └── settings.py
+├── db
+│   ├── alembic.ini
+│   ├── base.py
+│   ├── init_db.py
+│   ├── __init__.py
+│   ├── migrations
+│   │   ├── env.py
+│   │   ├── __pycache__
+│   │   ├── README
+│   │   ├── script.py.mako
+│   │   └── versions
+│   └── session.py
+├── domains
+│   ├── child_registrations
+│   │   ├── api.py
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── __pycache__
+│   │   ├── repo.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   ├── events
+│   │   ├── api.py
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── repo.py
+│   │   ├── schemas.py
+│   │   └── service.py
+│   └── users
+│       ├── api.py
+│       ├── __init__.py
+│       ├── models.py
+│       ├── repo.py
+│       ├── schemas.py
+│       └── service.py
+├── __init__.py
+├── integrations
+│   ├── bot
+│   │   ├── admin.py
+│   │   ├── child.py
+│   │   ├── commands.py
+│   │   ├── handlers.py
+│   │   ├── __init__.py
+│   │   ├── keyboards.py
+│   │   ├── logger.py
+│   │   └── middleware.py
+│   ├── __init__.py
+│   └── vk
+│       └── client.py
+├── main.py
+├── __pycache__
+│   └── main.cpython-312.pyc
+├── structure.txt
+└── workers
+    ├── celery_app.py
+    ├── __init__.py
+    └── tasks
+        ├── __init__.py
+        └── vk_tasks.py
+
+21 directories, 51 files

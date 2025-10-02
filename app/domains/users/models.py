@@ -8,13 +8,13 @@ from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.db.base import Base
+from app.db.base import PreBase
 
 if TYPE_CHECKING:  # для подсказок типов, во избежание циклических импортов
     from app.domains.child_registrations.models import ChildRegistration
 
 
-class Admin(Base):
+class Admin(PreBase):
     """Модель роли администратора."""
 
     __tablename__ = "admins"
@@ -27,7 +27,7 @@ class Admin(Base):
     user = relationship("User", back_populates="admin_role")
 
 
-class User(Base):
+class User(PreBase):
     """Модель пользователя."""
 
     __tablename__ = "users"
