@@ -5,7 +5,7 @@ from typing import Callable, Dict, Any, Awaitable
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.db.base import async_session_maker
+from app.db.session import async_session_maker
 from .service import BotService
 
 logger = logging.getLogger("my_app.bot.middleware")

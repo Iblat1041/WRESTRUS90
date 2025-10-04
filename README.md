@@ -71,7 +71,7 @@ cd infra
 
 ### 2. Запустите Docker-контейнер `docker-compose.local.yml`:
 ```bash
-docker-compose -f docker-compose.local.yml -d
+docker-compose -f docker-compose.local.yml up -d
 ```
 
 ### 3. Дождитесь полного запуска контейнера (это может занять несколько секунд).

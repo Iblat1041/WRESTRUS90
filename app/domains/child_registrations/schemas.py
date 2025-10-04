@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
+
 class ChildRegBase(BaseModel):
     """Базовая схема для регистрации ребенка."""
     child_name: str
@@ -12,9 +13,11 @@ class ChildRegBase(BaseModel):
     user_id: int
     status: str = "pending"
 
+
 class ChildRegCreate(ChildRegBase):
     """Схема для создания регистрации ребенка."""
     pass
+
 
 class ChildRegRead(ChildRegBase):
     """Схема для чтения регистрации ребенка."""

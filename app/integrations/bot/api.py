@@ -5,6 +5,8 @@ from aiogram.types import BotCommand
 from typing import List
 import logging
 
+from fastapi import types
+
 from app.core.settings import settings
 from .handlers.admin import admin_router
 from .handlers.base import base_router, group_router

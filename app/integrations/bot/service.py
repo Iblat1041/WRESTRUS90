@@ -4,7 +4,7 @@ from typing import List, Tuple, Optional
 import logging
 
 from app.domains.child_registrations.models import ChildRegistration
-from app.domains.child_registrations.repo import child_registrations_repo
+from app.domains.child_registrations.repo import ChildRegRepository
 from app.domains.events.models import Event
 from app.domains.events.repo import events_repo
 from app.domains.users.models import User
